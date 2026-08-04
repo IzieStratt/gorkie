@@ -1,74 +1,69 @@
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { LanguageModelV3 } from '@ai-sdk/provider';
 import type { ModelWithRetries } from '@mastra/core/agent';
+import { extractReasoningMiddleware, wrapLanguageModel } from 'ai';
 import { env } from '@/env';
 
-type GatewayConfig = ModelWithRetries['model'] & { id: `${string}/${string}` };
+const hackClubProvider = createOpenAICompatible({
+  name: 'hackclub',
+  baseURL: 'https://ai.hackclub.com/proxy/v1',
+  apiKey: env.HACKCLUB_API_KEY,
+});
 
-function gateways(id: `${string}/${string}`): GatewayConfig[] {
+const openRouterProvider = env.OPENROUTER_API_KEY
+  ? createOpenAICompatible({
+      name: 'openrouter',
+      baseURL: env.OPENROUTER_BASE_URL,
+      apiKey: env.OPENROUTER_API_KEY,
+    })
+  : null;
+
+function gateways(id: string): LanguageModelV3[] {
+  const hackClubId = id.replace(/^openrouter\//, '');
   return [
-    {
-      id,
-      apiKey: env.HACKCLUB_API_KEY,
-      url: 'https://ai.hackclub.com/proxy/v1',
-    },
-    { id, apiKey: env.OPENROUTER_API_KEY, url: env.OPENROUTER_BASE_URL },
-  ];
+    hackClubProvider.chatModel(hackClubId),
+    openRouterProvider?.chatModel(id),
+  ].filter((model): model is LanguageModelV3 => Boolean(model));
 }
 
-function inference(id: `${string}/${string}`): GatewayConfig[] {
-  return env.INFERENCE_API_KEY && env.INFERENCE_BASE_URL
-    ? [{ id, apiKey: env.INFERENCE_API_KEY, url: env.INFERENCE_BASE_URL }]
-    : [];
+const opencodeProvider = env.OPENCODE_API_KEY
+  ? createOpenAICompatible({
+      name: 'opencode-go',
+      baseURL: 'https://opencode.ai/zen/go/v1',
+      apiKey: env.OPENCODE_API_KEY,
+    })
+  : null;
+
+function opencode(model: string): LanguageModelV3 {
+  if (!opencodeProvider) throw new Error('OPENCODE_API_KEY is required');
+  return wrapLanguageModel({
+    model: opencodeProvider.chatModel(model),
+    middleware: extractReasoningMiddleware({ tagName: 'think' }),
+  });
 }
 
 export const orchestrator: ModelWithRetries[] = [
-  ...inference('openrouter/moonshotai/kimi-k2.6').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
-  ...inference('openrouter/deepseek/deepseek-v4-pro').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
   ...gateways('openrouter/minimax/minimax-m3').map((model) => ({
     model,
     maxRetries: 3,
-    providerOptions: {
-      openrouter: { reasoningEffort: 'medium' },
-    },
+    providerOptions: { openrouter: { reasoningEffort: 'medium' } },
   })),
+  { model: opencode('gpt-5.6-luna'), maxRetries: 3 },
 ];
 
 export const summarizer: ModelWithRetries[] = [
-  ...inference('openrouter/deepseek/deepseek-v4-flash').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
-  ...gateways('openrouter/google/gemini-3.1-flash-lite').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
+  ...gateways('openrouter/google/gemini-3.1-flash-lite').map((model) => ({ model, maxRetries: 3 })),
+  { model: opencode('mimo-v2.5'), maxRetries: 3 },
 ];
 
 export const scout: ModelWithRetries[] = [
-  ...inference('openrouter/deepseek/deepseek-v4-flash').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
-  ...gateways('openrouter/deepseek/deepseek-v4-flash').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
+  ...gateways('openrouter/deepseek/deepseek-v4-flash').map((model) => ({ model, maxRetries: 3 })),
+  { model: opencode('gpt-5.6-luna'), maxRetries: 3 },
 ];
 
 export const explorer: ModelWithRetries[] = [
-  ...inference('openrouter/moonshotai/kimi-k2.6').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
-  ...gateways('openrouter/minimax/minimax-m3').map((model) => ({
-    model,
-    maxRetries: 3,
-  })),
+  ...gateways('openrouter/minimax/minimax-m3').map((model) => ({ model, maxRetries: 3 })),
+  { model: opencode('gpt-5.6-luna'), maxRetries: 3 },
 ];
 
 export const images = {
