@@ -6,20 +6,8 @@ interface MediaPart {
   type: 'media';
 }
 
-/**
- * Every gateway Gorkie routes through (`gateways()`/`opencode()` in
- * `providers.ts`) is OpenAI-compatible, and none of those provider
- * implementations understand `media` parts inside tool-result content — they
- * fall back to JSON.stringify-ing the whole part as text, so the model never
- * sees the image. Relocating the image into a synthetic user message works
- * everywhere because user-message `file` parts are handled by every provider.
- *
- * Scoped to `image/*` only: the OpenAI-compatible user-message converter
- * throws `UnsupportedFunctionalityError` for other media types (e.g. PDF),
- * which would crash the turn instead of merely not working.
- */
-export const relocateToolResultImages: CompatRule = {
-  name: 'relocate-tool-result-images',
+export const moveToolImages: CompatRule = {
+  name: 'move-tool-images',
   applyToPrompt({ prompt }) {
     let changed = false;
     const next: typeof prompt = [];
@@ -65,11 +53,13 @@ export const relocateToolResultImages: CompatRule = {
         role: 'user',
         content: [
           { type: 'text', text: 'Attached media from tool result:' },
-          ...images.map((image) => ({
-            type: 'file' as const,
-            data: image.data,
-            mediaType: image.mediaType,
-          })),
+          ...images.map(
+            (image): { type: 'file'; data: string; mediaType: string } => ({
+              type: 'file',
+              data: image.data,
+              mediaType: image.mediaType,
+            })
+          ),
         ],
       });
     }

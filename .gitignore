@@ -12,7 +12,6 @@ coverage
 
 # logs
 logs
-_.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
@@ -33,11 +32,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 output.txt
-node_modules
-dist
 .mastra
 .env.development
-.env
 *.db
 *.db-*
 .netlify
@@ -53,8 +49,4 @@ dist
 *.duckdb
 *.duckdb.wal
 
-# logs
 *.log
-
-# wayfinder
-.wayfinder

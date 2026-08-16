@@ -1,4 +1,4 @@
-import type { CoreSystemMessage, SystemMessage } from '@mastra/core/llm';
+import type { CoreSystemMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { contextPrompt } from './context';
 import { corePrompt } from './core';
@@ -7,19 +7,19 @@ import { personalityPrompt } from './personality';
 import { slackPrompt } from './slack';
 import { toolsPrompt } from './tools';
 
-export function buildInstructions(
+export function instructions(
   requestContext: RequestContext
-): SystemMessage {
+): CoreSystemMessage[] {
   const context = contextPrompt(requestContext);
   const messages: CoreSystemMessage[] = [
     {
       role: 'system',
       content: [
         corePrompt,
-        guardrailsPrompt,
         personalityPrompt,
         slackPrompt,
         toolsPrompt,
+        guardrailsPrompt,
       ].join('\n\n'),
     },
   ];

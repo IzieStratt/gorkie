@@ -1,25 +1,31 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { sh } from '../lib/shell';
-import { resolveE2BSandbox } from '../workspace';
+import { input, output } from '../types/tools/index';
+import { getSandbox } from '../workspace';
 
 const MAX_OUTPUT_LINES = 500;
 
-interface RgMatchRecord {
-  data: {
-    path: { text: string };
-    lines: { text: string };
-    line_number: number;
-    submatches?: { start: number }[];
-  };
-  type: 'match' | 'context';
-}
+const rgMatchRecordSchema = z.object({
+  data: z.object({
+    path: z.object({ text: z.string() }),
+    lines: z.object({ text: z.string() }),
+    line_number: z.number(),
+  }),
+  type: z.enum(['match', 'context']),
+});
+
+const commandErrorSchema = z.looseObject({
+  exitCode: z.number().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+});
 
 export const grepTool = createTool({
   id: 'grep',
   description:
     'Search file contents using a regex pattern via ripgrep. Fast native search inside the sandbox. Respects .gitignore by default.',
-  inputSchema: z.object({
+  inputSchema: input({
     pattern: z.string().min(1).describe('Regex pattern to search for.'),
     path: z
       .string()
@@ -56,6 +62,17 @@ export const grepTool = createTool({
       .default(false)
       .describe('Include hidden files and directories (default: false).'),
   }),
+  outputSchema: output({
+    matches: z.number().int().min(0),
+    output: z.string().optional(),
+  }),
+  transform: {
+    display: {
+      output: ({ input, output }) => ({
+        summary: `Found ${output?.matches ?? 0} matches for "${input?.pattern ?? ''}" in ${input?.path ?? '.'}`,
+      }),
+    },
+  },
   execute: async (
     { pattern, path, contextLines, maxCount, caseSensitive, includeHidden },
     context
@@ -63,7 +80,7 @@ export const grepTool = createTool({
     if (!context?.requestContext) {
       throw new Error('No workspace context.');
     }
-    const sandbox = await resolveE2BSandbox(context.requestContext);
+    const sandbox = await getSandbox(context.requestContext);
     if (!sandbox) {
       throw new Error('No sandbox available.');
     }
@@ -100,18 +117,11 @@ export const grepTool = createTool({
         })
       ));
     } catch (error) {
-      // rg exits 1 for "no matches" (not an error) and 2 for real errors
-      // (e.g. invalid regex); E2B throws CommandExitError on any non-zero exit.
-      const exit = error as {
-        exitCode?: number;
-        stdout?: string;
-        stderr?: string;
-      };
+      // ripgrep uses exit 1 for no matches and 2 for errors.
+      const exit = commandErrorSchema.safeParse(error).data ?? {};
       if (exit.exitCode === 1) {
         return {
-          success: true,
           matches: 0,
-          message: `No matches for "${pattern}".`,
         };
       }
       throw new Error(
@@ -129,16 +139,21 @@ export const grepTool = createTool({
       if (!line) {
         continue;
       }
-      let record: RgMatchRecord;
+      let parsed: unknown;
       try {
-        record = JSON.parse(line) as RgMatchRecord;
+        parsed = JSON.parse(line);
       } catch {
         continue;
       }
-      if (record.type !== 'match' && record.type !== 'context') {
+      const record = rgMatchRecordSchema.safeParse(parsed);
+      if (!record.success) {
         continue;
       }
-      const { path: filePath, lines, line_number: lineNumber } = record.data;
+      const {
+        path: filePath,
+        lines,
+        line_number: lineNumber,
+      } = record.data.data;
       const text = lines.text.replace(/\n$/, '');
       let fileLines = byFile.get(filePath.text);
       if (!fileLines) {
@@ -146,7 +161,7 @@ export const grepTool = createTool({
         byFile.set(filePath.text, fileLines);
         fileOrder.push(filePath.text);
       }
-      if (record.type === 'match') {
+      if (record.data.type === 'match') {
         matchCount += 1;
         fileLines.push(`  Line ${lineNumber}: ${text}`);
       } else {
@@ -161,9 +176,7 @@ export const grepTool = createTool({
 
     if (matchCount === 0) {
       return {
-        success: true,
         matches: 0,
-        message: `No matches for "${pattern}".`,
       };
     }
 
@@ -183,10 +196,8 @@ export const grepTool = createTool({
     }
 
     return {
-      success: true,
       matches: matchCount,
       output: output.join('\n'),
-      message: `${matchCount} matching line${matchCount === 1 ? '' : 's'} for "${pattern}"${truncated ? ' (truncated)' : ''}.`,
     };
   },
 });

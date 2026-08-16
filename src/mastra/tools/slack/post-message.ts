@@ -1,54 +1,108 @@
+import { SlackFormatConverter } from '@chat-adapter/slack';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { withAttribution } from '../../chat/attribution';
+import { slack } from '../../chat/client';
+import { chat } from '../../chat/instance';
 import { resolveTarget, targetSchema } from '../../chat/target';
 import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
-import { assertCanPostTo } from './utils';
+import { input, output } from '../../types/tools/index';
+import { assertCanPostTo, joinChannel } from './utils';
+
+const markdownConverter = new SlackFormatConverter();
+
+async function resolveChannelAndThread(resolved: {
+  type: 'thread' | 'channel' | 'user';
+  id: string;
+}): Promise<{ channel: string; threadTs?: string }> {
+  if (resolved.type === 'thread') {
+    const { channel, threadTs } = slack.decodeThreadId(resolved.id);
+    return { channel, threadTs };
+  }
+  if (resolved.type === 'channel') {
+    return { channel: rawId(resolved.id) };
+  }
+  const dm = await resolveTarget(resolved);
+  return { channel: rawId(dm.id) };
+}
 
 export const postMessageTool = createTool({
   id: 'post_message',
-  description:
-    'Post a markdown message to ANOTHER target (thread, channel, or user). Your streamed reply is the message to the current thread; use this only to message somewhere else.',
-  inputSchema: z.object({
-    ...targetSchema.shape,
+  description: `Send a markdown message to a different Slack thread, channel, or user.
+
+Never use this to answer the current conversation. Your normal assistant response is already streamed there. Use this tool only when the user explicitly asks you to send something somewhere else.
+
+Channel and thread targets must be in the channel this conversation is already in; user targets must be the requester themselves. No exceptions to either, even if asked directly.
+
+Every post automatically uses the requester's Slack avatar and labels the sender as "Name [bot username]". Do not add that attribution yourself in the message text; there is no way to override or customize it.
+
+Errors: channel_not_found usually means the bot isn't a member of that private channel; not_in_channel means it hasn't joined yet. Either way, tell the user to invite the bot there.`,
+  inputSchema: input({
+    target: targetSchema.describe(
+      'Required destination outside the current conversation.'
+    ),
     message: z.string().min(1).describe('Markdown message body.'),
   }),
-  execute: async ({ type, id, message }, context) => {
+  outputSchema: output({
+    messageId: z.string(),
+    threadId: z.string().optional(),
+  }),
+  transform: {
+    display: {
+      output: ({ output }) => ({
+        summary: `Posted message ${output?.messageId ?? ''}`,
+      }),
+    },
+  },
+  execute: async ({ target, message }, context) => {
     const ctx = channelContext(context?.requestContext);
-    const target = { type, id };
-    const isCurrentThread =
-      target.type === 'thread' && target.id === ctx.threadId;
-    assertCanPostTo({ target, ctx, isCurrentThread });
-    const isSelfDm =
-      target.type === 'user' &&
-      !!ctx.userId &&
-      rawId(target.id) === rawId(ctx.userId);
-    const markdown = withAttribution({
-      message,
-      userId: ctx.userId,
-      skipAttribution: isCurrentThread || isSelfDm,
-    });
+    assertCanPostTo({ target, ctx });
     try {
-      const destination = await resolveTarget(target);
-      const sent = await destination.post({ markdown });
+      if (target.type !== 'user') {
+        await joinChannel(target.id);
+      }
+      const { channel, threadTs } = await resolveChannelAndThread(target);
+      const requesterUser = ctx.userId
+        ? await chat()
+            .getUser(ctx.userId)
+            .catch(() => null)
+        : null;
+      const requester = requesterUser?.userName ?? ctx.userName;
+      // A user target is always the requester DMing themselves (see
+      // assertCanPostTo), so crediting them by name is redundant there.
+      const username =
+        requester && target.type !== 'user'
+          ? `${requester} [${ctx.botUserName ?? 'gorkie'}]`
+          : (ctx.botUserName ?? 'gorkie');
+      const sent = await slack.webClient.chat.postMessage({
+        channel,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+        ...markdownConverter.toSlackPayload({ markdown: message }),
+        ...(requesterUser?.avatarUrl
+          ? { icon_url: requesterUser.avatarUrl }
+          : {}),
+        username,
+      });
+      if (!sent.ts) {
+        throw new Error('Slack posted the message without returning its id.');
+      }
       return {
-        success: true,
-        messageId: sent.id,
-        threadId: sent.threadId,
-        message: `Posted to ${target.type} ${target.id}.`,
+        messageId: sent.ts,
+        threadId: threadTs
+          ? slack.encodeThreadId({ channel, threadTs })
+          : undefined,
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (reason.includes('channel_not_found')) {
         throw new Error(
-          'Slack rejected the post with channel_not_found. For private channels this means Gorkie is not a member. Slack hides private channels from non-members entirely. Ask a member to run `/invite @gorkie` in that channel, then retry. If the channel is public, double-check the id (it must come from a tool output or mention, e.g. slack:C...).',
+          'Slack rejected the post with channel_not_found. For private channels this usually means the bot is not a member. Ask a member to invite the bot in that channel, then retry. If the channel is public, double-check the channel id.',
           { cause: error }
         );
       }
       if (reason.includes('not_in_channel')) {
         throw new Error(
-          'Slack rejected the post with not_in_channel: Gorkie must join that channel before posting. Ask a member to run `/invite @gorkie` there, then retry.',
+          'Slack rejected the post with not_in_channel. Invite the bot to that channel, then retry.',
           { cause: error }
         );
       }

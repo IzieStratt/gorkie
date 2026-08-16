@@ -2,29 +2,23 @@ import type {
   ProcessOutputResultArgs,
   ProcessOutputStepArgs,
 } from '@mastra/core/processors';
-import { sandbox as config } from '../config';
-import { resolveE2BSandbox } from '../workspace';
+import { sandbox as sandboxConfig } from '../config';
+import { logger } from '../lib/logger';
+import { getSandbox, workspaceToolNames } from '../workspace';
 
 const sandboxTools = new Set([
-  'execute_command',
-  'get_process_output',
-  'kill_process',
+  ...workspaceToolNames,
+  'slack',
   'get_slack_file',
   'upload_file',
-  'read_file',
-  'write_file',
-  'edit_file',
-  'list_files',
-  'delete_file',
-  'file_stat',
-  'mkdir',
   'grep',
-  'ast_edit',
 ]);
 
 export const sandbox = {
   id: 'sandbox',
   name: 'Sandbox Lifecycle',
+  description:
+    'Extends sandbox lifetime during active tool use, then pauses it once the turn finishes.',
   async processOutputStep(args: ProcessOutputStepArgs) {
     const { toolCalls, requestContext, messages } = args;
     if (
@@ -36,12 +30,13 @@ export const sandbox = {
       )
     ) {
       try {
-        const sandbox = await resolveE2BSandbox(requestContext);
+        const sandbox = await getSandbox(requestContext);
         await sandbox?.retryOnDead(() =>
-          sandbox.e2b.setTimeout(config.timeout)
+          sandbox.e2b.setTimeout(sandboxConfig.timeout)
         );
-      } catch {
-        /* not started */
+      } catch (error) {
+        logger.debug('[sandbox] failed to extend lifetime', { error });
+        return messages;
       }
     }
     return messages;
@@ -50,10 +45,10 @@ export const sandbox = {
     const { requestContext, messages } = args;
     if (requestContext) {
       try {
-        const sandbox = await resolveE2BSandbox(requestContext);
+        const sandbox = await getSandbox(requestContext);
         await sandbox?.retryOnDead(() => sandbox.e2b.pause());
-      } catch {
-        /* not started / already paused */
+      } catch (error) {
+        logger.debug('[sandbox] failed to pause', { error });
       }
     }
     return messages;

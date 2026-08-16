@@ -4,24 +4,22 @@ import { slack } from '../../chat/client';
 import { chat } from '../../chat/instance';
 import { threadState } from '../../chat/state';
 import { channelContext } from '../../lib/context';
+import { chatChannelId } from '../../lib/ids';
+import { input, output } from '../../types/tools/index';
 
-function snippet(text: string, max = 600): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= max) {
-    return normalized;
-  }
-  return `${normalized.slice(0, max - 3)}...`;
-}
-
-const contextMessage = z
+const contextMessageSchema = z
   .looseObject({
     text: z.string().optional(),
     ts: z.string().optional(),
     user_id: z.string().optional(),
   })
-  .transform((m) => ({ text: m.text ?? '', ts: m.ts, userId: m.user_id }));
+  .transform((message) => ({
+    text: message.text ?? '',
+    ts: message.ts,
+    userId: message.user_id,
+  }));
 
-const searchResponse = z.looseObject({
+const searchResponseSchema = z.looseObject({
   response_metadata: z
     .looseObject({ next_cursor: z.string().optional() })
     .optional(),
@@ -38,26 +36,28 @@ const searchResponse = z.looseObject({
               content: z.string().optional(),
               context_messages: z
                 .looseObject({
-                  after: z.array(contextMessage).optional(),
-                  before: z.array(contextMessage).optional(),
+                  after: z.array(contextMessageSchema).optional(),
+                  before: z.array(contextMessageSchema).optional(),
                 })
                 .optional(),
               permalink: z.string().optional(),
               team_id: z.string().optional(),
             })
-            .transform((m) => ({
-              author: m.author_name,
-              userId: m.author_user_id,
-              channelId: m.channel_id,
-              channelName: m.channel_name,
-              text: snippet(m.content ?? ''),
-              before: (m.context_messages?.before ?? [])
+            .transform((message) => ({
+              author: message.author_name,
+              userId: message.author_user_id,
+              channelId: message.channel_id
+                ? chatChannelId(message.channel_id)
+                : undefined,
+              channelName: message.channel_name,
+              text: (message.content ?? '').slice(0, 1200),
+              before: (message.context_messages?.before ?? [])
                 .slice(-3)
-                .map((item) => snippet(item.text, 180)),
-              after: (m.context_messages?.after ?? [])
+                .map((item) => item.text.slice(0, 400)),
+              after: (message.context_messages?.after ?? [])
                 .slice(0, 3)
-                .map((item) => snippet(item.text, 180)),
-              permalink: m.permalink,
+                .map((item) => item.text.slice(0, 400)),
+              permalink: message.permalink,
             }))
         )
         .optional(),
@@ -68,8 +68,8 @@ const searchResponse = z.looseObject({
 export const searchSlackTool = createTool({
   id: 'search_slack',
   description:
-    'Search Slack messages for past conversations, decisions, links, people, or internal references outside the current thread. Use specific queries (keywords, names, channels, dates). For unfamiliar references and "what is X" questions, pair this with search_web and compare results before answering.',
-  inputSchema: z.object({
+    'Run one Slack message search for past conversations, decisions, links, people, or internal references. Use Slack search syntax to narrow by keywords, names, channels, senders, or dates. The search token expires roughly two minutes into the turn, so run all needed Slack searches early and batch them before other work. This returns one result page with short surrounding context. Use Slack code mode when the task needs multiple queries, exhaustive pagination, filtering, aggregation, or full conversation reads. Search requires a fresh token from an @mention.',
+  inputSchema: input({
     query: z
       .string()
       .min(1)
@@ -82,22 +82,42 @@ export const searchSlackTool = createTool({
       .optional()
       .describe('Cursor from a previous result page.'),
   }),
+  outputSchema: output({
+    messages: z.array(
+      z.strictObject({
+        author: z.string().optional(),
+        userId: z.string().optional(),
+        channelId: z.string().optional(),
+        channelName: z.string().optional(),
+        text: z.string(),
+        before: z.array(z.string()),
+        after: z.array(z.string()),
+        permalink: z.string().optional(),
+      })
+    ),
+    nextCursor: z.string().optional(),
+  }),
+  transform: {
+    display: {
+      output: ({ input, output }) => ({
+        summary: `Found ${output?.messages.length ?? 0} Slack messages for "${input?.query ?? ''}"`,
+      }),
+    },
+  },
   execute: async ({ query, cursor }, context) => {
     const { threadId } = channelContext(context?.requestContext);
     const thread = threadId ? chat().thread(threadId) : undefined;
     const state = await threadState(thread);
     const token = state?.searchToken;
     if (!(thread && token)) {
-      return {
-        success: false,
-        message:
-          'No fresh Slack search token for this thread. Slack only provides a short-lived one when the user messages or @mentions gorkie, so ask them to mention you and try again.',
-      };
+      throw new Error(
+        'No fresh Slack search token for this thread. Ask the user to mention the bot in a new message, then search again.'
+      );
     }
 
-    let res: z.infer<typeof searchResponse>;
+    let response: z.infer<typeof searchResponseSchema>;
     try {
-      res = searchResponse.parse(
+      response = searchResponseSchema.parse(
         await slack.webClient.apiCall('assistant.search.context', {
           action_token: token,
           content_types: ['messages'],
@@ -114,22 +134,18 @@ export const searchSlackTool = createTool({
         reason.includes('token_expired')
       ) {
         await thread.setState({ searchToken: undefined });
-        return {
-          success: false,
-          message:
-            'The Slack search token for this thread expired. Ask the @mention gorkie in a new message, then search again.',
-        };
+        throw new Error(
+          'The Slack search token expired. Ask the user to mention the bot in a new message, then search again.',
+          { cause: error }
+        );
       }
       throw error;
     }
 
-    const messages = res.results?.messages ?? [];
+    const messages = response.results?.messages ?? [];
     return {
-      success: true,
       messages,
-      count: messages.length,
-      nextCursor: res.response_metadata?.next_cursor || undefined,
-      message: `Slack search found ${messages.length} message${messages.length === 1 ? '' : 's'} for "${query}".`,
+      nextCursor: response.response_metadata?.next_cursor || undefined,
     };
   },
 });

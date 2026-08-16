@@ -1,20 +1,43 @@
 import { logger } from '../../lib/logger';
-import { resolveMemoryThread } from '../../lib/memory';
+import { memoryThread } from '../../lib/memory';
 import type { CommandHandler } from '../../types';
 
-export const stop: CommandHandler = async (thread, message) => {
-  const { gorkieAgent } = await import('../../agents/gorkie');
-  const memoryThread = await resolveMemoryThread(gorkieAgent, thread.id).catch(
-    () => undefined
-  );
-  const scope = memoryThread
-    ? { threadId: memoryThread.id, resourceId: memoryThread.resourceId }
+export const stop: CommandHandler = async ({ message, thread }) => {
+  const { default: orchestrator } = await import('../../agents/orchestrator');
+  const threadMemory = await memoryThread({
+    agent: orchestrator,
+    externalThreadId: thread.id,
+  }).catch(() => undefined);
+  const scope = threadMemory
+    ? { threadId: threadMemory.id, resourceId: threadMemory.resourceId }
     : undefined;
   const activeRunId = scope
-    ? gorkieAgent.getActiveThreadRunId(scope)
+    ? orchestrator.getActiveThreadRunId(scope)
     : undefined;
+  const manager = orchestrator.getMastraInstance()?.backgroundTaskManager;
+  const backgroundTasks = await (async () => {
+    if (!(scope && manager)) {
+      return [];
+    }
+    try {
+      return (
+        await manager.listTasks({
+          agentId: orchestrator.id,
+          threadId: scope.threadId,
+          ...(scope.resourceId ? { resourceId: scope.resourceId } : {}),
+          status: ['pending', 'running', 'suspended'],
+        })
+      ).tasks;
+    } catch (error) {
+      logger.warn('[commands] Failed to list background tasks for stop', {
+        error,
+        threadId: thread.id,
+      });
+      return [];
+    }
+  })();
 
-  if (!(scope && activeRunId)) {
+  if (!(scope && (activeRunId || backgroundTasks.length > 0))) {
     await thread
       .postEphemeral(message.author, 'Nothing to stop right now.', {
         fallbackToDM: false,
@@ -29,6 +52,18 @@ export const stop: CommandHandler = async (thread, message) => {
     return;
   }
 
-  gorkieAgent.abortThreadStream(scope);
+  if (activeRunId) {
+    orchestrator.abortThreadStream(scope);
+  }
+  if (manager) {
+    const cancellations = await Promise.allSettled(
+      backgroundTasks.map((task) => manager.cancel(task.id))
+    );
+    if (cancellations.some(({ status }) => status === 'rejected')) {
+      logger.warn('[commands] Some background tasks failed to stop', {
+        threadId: thread.id,
+      });
+    }
+  }
   await thread.post({ markdown: '_Stopped._' });
 };

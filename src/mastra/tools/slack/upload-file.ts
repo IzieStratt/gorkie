@@ -1,17 +1,16 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { withAttribution } from '../../chat/attribution';
 import { resolveTarget, targetSchema } from '../../chat/target';
 import { channelContext } from '../../lib/context';
-import { rawId } from '../../lib/ids';
-import { resolveE2BSandbox } from '../../workspace';
-import { assertCanPostTo } from './utils';
+import { input, output } from '../../types/tools/index';
+import { getSandbox } from '../../workspace';
+import { assertCanPostTo, joinChannel } from './utils';
 
 export const uploadFileTool = createTool({
   id: 'upload_file',
   description:
-    'Upload a file from the sandbox to a Slack destination. Defaults to the current thread; pass target to send it elsewhere (e.g. a DM).',
-  inputSchema: z.object({
+    'Upload a file from the sandbox to Slack. Defaults to the current thread; pass target to send it elsewhere. Channel and thread targets must be in the channel this conversation is already in; user targets must be the requester themselves.',
+  inputSchema: input({
     path: z
       .string()
       .min(1)
@@ -30,11 +29,23 @@ export const uploadFileTool = createTool({
       .optional()
       .describe('Optional destination other than the current thread.'),
   }),
+  outputSchema: output({
+    filename: z.string(),
+    path: z.string(),
+    fileId: z.string().optional(),
+  }),
+  transform: {
+    display: {
+      output: ({ output }) => ({
+        summary: `Uploaded ${output?.filename ?? 'file'}`,
+      }),
+    },
+  },
   execute: async ({ path, filename, comment, target }, context) => {
     if (!context?.requestContext) {
       throw new Error('No workspace context.');
     }
-    const sandbox = await resolveE2BSandbox(context.requestContext);
+    const sandbox = await getSandbox(context.requestContext);
     if (!sandbox) {
       throw new Error('No sandbox available.');
     }
@@ -54,33 +65,27 @@ export const uploadFileTool = createTool({
     if (!resolved) {
       throw new Error('No current thread to upload to.');
     }
-    const isCurrentThread =
-      resolved.type === 'thread' && resolved.id === ctx.threadId;
-    assertCanPostTo({ target: resolved, ctx, isCurrentThread });
-    const isSelfDm =
-      resolved.type === 'user' &&
-      !!ctx.userId &&
-      rawId(resolved.id) === rawId(ctx.userId);
-    const markdown = withAttribution({
-      message: comment ?? '',
-      userId: ctx.userId,
-      skipAttribution: isCurrentThread || isSelfDm,
-    });
-
+    assertCanPostTo({ target: resolved, ctx });
+    if (resolved.type !== 'user') {
+      await joinChannel(resolved.id);
+    }
     const destination = await resolveTarget(resolved);
 
-    await destination.post({
-      markdown,
+    const sent = await destination.post({
+      markdown: comment ?? '',
       files: [{ data: Buffer.from(bytes), filename: name }],
     });
 
+    // The Chat SDK doesn't surface the Slack file id directly on Attachment,
+    // but the private download URL it does return embeds it in the path.
+    const fileId = sent.attachments
+      .map((attachment) => /(F[A-Z0-9]{6,})/.exec(attachment.url ?? '')?.[1])
+      .find((id) => id !== undefined);
+
     return {
-      success: true,
       filename: name,
       path,
-      message: target
-        ? `Uploaded ${name} to ${resolved.type} ${resolved.id}.`
-        : `Uploaded ${name} to this Slack thread.`,
+      fileId,
     };
   },
 });

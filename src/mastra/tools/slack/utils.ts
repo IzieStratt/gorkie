@@ -30,26 +30,21 @@ export async function assertReadableChannel({
 export function assertCanPostTo({
   target,
   ctx,
-  isCurrentThread,
 }: {
   target: Target;
   ctx: ChannelContext;
-  isCurrentThread: boolean;
 }): void {
-  if (isCurrentThread) {
-    return;
-  }
   if (target.type === 'user') {
     if (!ctx.userId || rawId(target.id) !== rawId(ctx.userId)) {
       throw new Error(
-        'Gorkie can only DM the person currently asking, not a third party on their behalf. Ask that person to message Gorkie directly instead.'
+        'gorkie can only DM the person currently asking, not a third party on their behalf. Ask that person to message gorkie directly instead.'
       );
     }
     return;
   }
   if (!ctx.channelId) {
     throw new Error(
-      'No current channel to compare against, so Gorkie will not post there.'
+      'No current channel to compare against, so gorkie will not post there.'
     );
   }
   const targetChannelId =
@@ -58,7 +53,7 @@ export function assertCanPostTo({
       : slack.channelIdFromThreadId(target.id);
   if (chatChannelId(targetChannelId) !== chatChannelId(ctx.channelId)) {
     throw new Error(
-      'Gorkie can only post to the channel this conversation is already in, not a different channel. Ask a member of that channel to post it there.'
+      'gorkie can only post to the channel this conversation is already in, not a different channel. Ask a member of that channel to post it there.'
     );
   }
 }
@@ -69,8 +64,37 @@ export async function joinChannel(channelId: string): Promise<void> {
       channel: rawId(channelId),
     });
   } catch {
-    /* already a member, or can't join; reads will fail clearly if truly unreadable */
+    // Joining is best effort. The subsequent read reports inaccessible channels.
   }
+}
+
+export function slackThreadId({
+  channelId,
+  threadId,
+}: {
+  channelId?: string;
+  threadId: string;
+}): string {
+  let channel = channelId ? rawId(channelId) : undefined;
+  let timestamp = threadId;
+
+  if (threadId.startsWith('slack:')) {
+    ({ channel, threadTs: timestamp } = slack.decodeThreadId(threadId));
+  } else {
+    const permalink = threadId.match(/\/archives\/([CDG][A-Z0-9]+)\/p(\d+)/);
+    channel = permalink?.[1] ?? channel;
+    timestamp = permalink?.[2] ?? timestamp;
+  }
+
+  const compact = timestamp.replace('.', '');
+  if (!(channel && /^\d{16}$/.test(compact))) {
+    return threadId;
+  }
+
+  return slack.encodeThreadId({
+    channel,
+    threadTs: `${compact.slice(0, 10)}.${compact.slice(10)}`,
+  });
 }
 
 export function formatMessage(message: Message) {
