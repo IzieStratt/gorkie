@@ -31,6 +31,19 @@ function fileName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
 
+const delegationAgentIds = new Set(['research', 'explore']);
+
+function delegatedTool(
+  toolName: string
+): { agentId: string; childToolName: string } | undefined {
+  for (const agentId of delegationAgentIds) {
+    const prefix = `agent-${agentId}_`;
+    if (toolName.startsWith(prefix)) {
+      return { agentId, childToolName: toolName.slice(prefix.length) };
+    }
+  }
+}
+
 const statuses: Record<string, (args: Args) => string> = {
   call_slack_api: (args) => {
     const method = str(args, 'method');
@@ -213,8 +226,19 @@ export const typingStatus: TypingStatusFn = (chunk, context) => {
   }
 
   const args = (chunk.payload.args as Args | undefined) ?? {};
-  const status = toolName.startsWith('agent-')
-    ? `is spawning a ${label(toolName.slice(6))} agent…`
+  if (
+    toolName.startsWith('agent-') &&
+    delegationAgentIds.has(toolName.slice(6))
+  ) {
+    return truncate(
+      `is spawning a ${label(toolName.slice(6)).toLowerCase()} agent…`,
+      50
+    );
+  }
+
+  const delegated = delegatedTool(toolName);
+  const status = delegated
+    ? `is using ${delegated.agentId}: ${label(delegated.childToolName).toLowerCase()}…`
     : (statuses[toolName]?.(args) ??
       `is using ${label(toolName).toLowerCase()}…`);
 
