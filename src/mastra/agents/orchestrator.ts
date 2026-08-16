@@ -15,6 +15,7 @@ import { typingStatus } from '../chat/typing-status';
 import { agent as config } from '../config';
 import { defaultErrorProcessors } from '../lib/error-handling';
 import { stepCountIs, toolCall } from '../lib/tools';
+import { clearStatus } from '../processors/clear-status';
 import { delegatedTools } from '../processors/delegated-tools';
 import { sandbox } from '../processors/sandbox';
 import { moveToolImages } from '../processors/tool-media';
@@ -71,7 +72,7 @@ const orchestrator = new Agent({
       additionalRules: [moveToolImages],
     }),
   ],
-  outputProcessors: [delegatedTools, sandbox],
+  outputProcessors: [delegatedTools, sandbox, clearStatus],
   tools: orchestratorTools,
   agents: {
     research: researchAgent,
