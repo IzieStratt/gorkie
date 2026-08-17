@@ -14,4 +14,4 @@ gorkie's source code is at https://github.com/techwithanirudh/gorkie.
 </slack>`;
 
 export const slackToolPrompt = `\
-For the current Slack conversation, omit optional channelId and threadId inputs so tools use request context. Pass an explicit Slack id only when it was provided by the user or returned by a tool. Never invent an id, change an id prefix, or convert a U... user id into a C... channel id. If search_slack reports an expired token, do not retry it; use conversation history or report that a fresh mention is required.`;
+For the current Slack conversation, omit optional channelId and threadId inputs so tools use request context. Pass an explicit Slack id only when it was provided by the user or returned by a tool. Never invent an id, change an id prefix, or convert a U... user id into a C... channel id. If search_slack reports an expired token and no user fallback token is configured, do not retry it; use conversation history or report that a fresh mention is required.`;

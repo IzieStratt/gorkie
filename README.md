@@ -109,6 +109,7 @@ local database named `gorkie`. Mastra auto-creates its tables on first run.
 |---|---|---|
 | `SLACK_BOT_TOKEN` | yes | Bot User OAuth token (`xoxb-…`) |
 | `SLACK_APP_TOKEN` | yes | App-level token with `connections:write` (`xapp-…`) |
+| `SLACK_SEARCH_USER_TOKEN` | no | Slack user bearer token used to fall back to `assistant.search.context` after the bot's ephemeral search token expires |
 | `OPT_IN_CHANNEL` | no | Slack channel id gating access to members only (opt-in allowlist); unset means everyone is allowed |
 | `HACKCLUB_API_KEY` | yes | Hack Club AI proxy key, a gateway rung for every model |
 | `OPENCODE_API_KEY` | yes | opencode.ai/zen gateway key, tried alongside Hack Club |
