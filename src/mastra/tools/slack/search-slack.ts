@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { slack } from '../../chat/client';
+import { env } from '@/env';
 import { chat } from '../../chat/instance';
 import { threadState } from '../../chat/state';
 import { channelContext } from '../../lib/context';
@@ -20,6 +20,8 @@ const contextMessageSchema = z
   }));
 
 const searchResponseSchema = z.looseObject({
+  ok: z.boolean(),
+  error: z.string().optional(),
   response_metadata: z
     .looseObject({ next_cursor: z.string().optional() })
     .optional(),
@@ -65,10 +67,47 @@ const searchResponseSchema = z.looseObject({
     .optional(),
 });
 
+async function searchSlack({
+  token,
+  query,
+  cursor,
+  actionToken,
+}: {
+  token: string;
+  query: string;
+  cursor?: string;
+  actionToken?: string;
+}): Promise<z.infer<typeof searchResponseSchema>> {
+  const response = await fetch(
+    'https://slack.com/api/assistant.search.context',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        query,
+        cursor,
+        action_token: actionToken,
+        content_types: ['messages'],
+        include_context_messages: true,
+        limit: 10,
+      }),
+    }
+  );
+
+  const parsed = searchResponseSchema.parse(await response.json());
+  if (!parsed.ok) {
+    throw new Error(parsed.error ?? 'Slack search failed.');
+  }
+  return parsed;
+}
+
 export const searchSlackTool = createTool({
   id: 'search_slack',
   description:
-    'Run one Slack message search for past conversations, decisions, links, people, or internal references. Use Slack search syntax to narrow by keywords, names, channels, senders, or dates. The search token expires roughly two minutes into the turn, so run all needed Slack searches early and batch them before other work. This returns one result page with short surrounding context. Use Slack code mode when the task needs multiple queries, exhaustive pagination, filtering, aggregation, or full conversation reads. Search requires a fresh token from an @mention.',
+    'Run one Slack message search for past conversations, decisions, links, people, or internal references. Use Slack search syntax to narrow by keywords, names, channels, senders, or dates. This returns one result page with short surrounding context. Use Slack code mode when the task needs multiple queries, exhaustive pagination, filtering, aggregation, or full conversation reads. Search normally starts from a fresh token on an @mention.',
   inputSchema: input({
     query: z
       .string()
@@ -109,37 +148,50 @@ export const searchSlackTool = createTool({
     const thread = threadId ? chat().thread(threadId) : undefined;
     const state = await threadState(thread);
     const token = state?.searchToken;
-    if (!(thread && token)) {
+    const fallbackToken = env.SLACK_SEARCH_USER_TOKEN;
+    const canUseBotSearch = Boolean(thread && token);
+    const searchToken = canUseBotSearch ? env.SLACK_BOT_TOKEN : fallbackToken;
+    if (!searchToken) {
       throw new Error(
-        'No fresh Slack search token for this thread. Ask the user to mention the bot in a new message, then search again.'
+        'No Slack search token is available. Ask the user to mention the bot in a new message or set SLACK_SEARCH_USER_TOKEN for search access.'
       );
     }
 
     let response: z.infer<typeof searchResponseSchema>;
     try {
-      response = searchResponseSchema.parse(
-        await slack.webClient.apiCall('assistant.search.context', {
-          action_token: token,
-          content_types: ['messages'],
-          cursor,
-          include_context_messages: true,
-          limit: 10,
-          query,
-        })
-      );
+      response = await searchSlack({
+        token: searchToken,
+        query,
+        cursor,
+        actionToken: canUseBotSearch ? token : undefined,
+      });
     } catch (error) {
       const reason = String(error);
       if (
         reason.includes('invalid_action_token') ||
         reason.includes('token_expired')
       ) {
-        await thread.setState({ searchToken: undefined });
-        throw new Error(
-          'The Slack search token expired. Ask the user to mention the bot in a new message, then search again.',
-          { cause: error }
-        );
+        if (fallbackToken) {
+          if (thread) {
+            await thread.setState({ searchToken: undefined });
+          }
+          response = await searchSlack({
+            token: fallbackToken,
+            query,
+            cursor,
+          });
+        } else {
+          if (thread) {
+            await thread.setState({ searchToken: undefined });
+          }
+          throw new Error(
+            'The Slack search token expired and no user search token is configured. Set SLACK_SEARCH_USER_TOKEN for search access or ask the user to mention the bot in a new message.',
+            { cause: error }
+          );
+        }
+      } else {
+        throw error;
       }
-      throw error;
     }
 
     const messages = response.results?.messages ?? [];
