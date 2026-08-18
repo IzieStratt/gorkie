@@ -6,17 +6,22 @@ import { threadState } from '../../chat/state';
 import { channelContext } from '../../lib/context';
 import { chatChannelId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
+import { assertReadableChannel } from './utils';
 
 const contextMessageSchema = z
   .looseObject({
     text: z.string().optional(),
     ts: z.string().optional(),
     user_id: z.string().optional(),
+    channel_id: z.string().optional(),
   })
   .transform((message) => ({
     text: message.text ?? '',
     ts: message.ts,
     userId: message.user_id,
+    channelId: message.channel_id
+      ? chatChannelId(message.channel_id)
+      : undefined,
   }));
 
 const searchResponseSchema = z.looseObject({
@@ -53,12 +58,8 @@ const searchResponseSchema = z.looseObject({
                 : undefined,
               channelName: message.channel_name,
               text: (message.content ?? '').slice(0, 1200),
-              before: (message.context_messages?.before ?? [])
-                .slice(-3)
-                .map((item) => item.text.slice(0, 400)),
-              after: (message.context_messages?.after ?? [])
-                .slice(0, 3)
-                .map((item) => item.text.slice(0, 400)),
+              before: (message.context_messages?.before ?? []).slice(-3),
+              after: (message.context_messages?.after ?? []).slice(0, 3),
               permalink: message.permalink,
             }))
         )
@@ -102,6 +103,68 @@ async function searchSlack({
     throw new Error(parsed.error ?? 'Slack search failed.');
   }
   return parsed;
+}
+
+export async function filterReadableMessages({
+  messages,
+  currentThreadId,
+  assertChannel = assertReadableChannel,
+}: {
+  messages: NonNullable<
+    NonNullable<z.infer<typeof searchResponseSchema>['results']>['messages']
+  >;
+  currentThreadId?: string;
+  assertChannel?: (options: {
+    channelId: string;
+    currentThreadId?: string;
+  }) => Promise<unknown>;
+}) {
+  const channelIds = new Set<string>();
+
+  for (const message of messages) {
+    if (message.channelId) {
+      channelIds.add(message.channelId);
+    }
+    for (const contextMessage of [...message.before, ...message.after]) {
+      const channelId = contextMessage.channelId ?? message.channelId;
+      if (channelId) {
+        channelIds.add(channelId);
+      }
+    }
+  }
+
+  const readableChannelIds = new Set(
+    (
+      await Promise.all(
+        [...channelIds].map((channelId) =>
+          assertChannel({ channelId, currentThreadId })
+            .then(() => channelId)
+            .catch(() => undefined)
+        )
+      )
+    ).filter((channelId) => channelId !== undefined)
+  );
+
+  return messages
+    .filter(
+      (message) =>
+        message.channelId && readableChannelIds.has(message.channelId)
+    )
+    .map((message) => ({
+      ...message,
+      before: message.before
+        .filter((contextMessage) => {
+          const channelId = contextMessage.channelId ?? message.channelId;
+          return Boolean(channelId && readableChannelIds.has(channelId));
+        })
+        .map((contextMessage) => contextMessage.text.slice(0, 400)),
+      after: message.after
+        .filter((contextMessage) => {
+          const channelId = contextMessage.channelId ?? message.channelId;
+          return Boolean(channelId && readableChannelIds.has(channelId));
+        })
+        .map((contextMessage) => contextMessage.text.slice(0, 400)),
+    }));
 }
 
 export const searchSlackTool = createTool({
@@ -194,7 +257,10 @@ export const searchSlackTool = createTool({
       }
     }
 
-    const messages = response.results?.messages ?? [];
+    const messages = await filterReadableMessages({
+      messages: response.results?.messages ?? [],
+      currentThreadId: threadId,
+    });
     return {
       messages,
       nextCursor: response.response_metadata?.next_cursor || undefined,
