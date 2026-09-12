@@ -1,12 +1,12 @@
 import { Agent } from '@mastra/core/agent';
 import { ProviderHistoryCompat } from '@mastra/core/processors';
-import { agent as config } from '../config';
+import { summarizer as config } from '../config';
 import { defaultErrorProcessors } from '../lib/error-handling';
 import { moveToolImages } from '../processors/tool-media';
 import { summarizer as summarizerModel } from '../providers';
 
 export const summarizer = new Agent({
-  id: 'summarizer',
+  id: config.id,
   name: 'Summarizer',
   description:
     'Summarizes a Slack conversation transcript concisely, preserving decisions, open questions, and action items.',

@@ -6,8 +6,13 @@ export const sandbox = {
 
 export const agent = {
   id: 'orchestrator',
-  maxTokens: { input: 200_000, output: 32_768 },
+  maxTokens: { input: 1_000_000, output: 65_536 },
   maxSteps: 1000,
+};
+
+export const summarizer = {
+  id: 'summarizer',
+  maxTokens: { output: 32_768 },
 };
 
 export const scheduledTasks = {

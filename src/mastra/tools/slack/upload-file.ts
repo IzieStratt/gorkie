@@ -8,12 +8,8 @@ import { input, output } from '../../types/tools/index';
 import { requireSandbox } from '../../workspace';
 import { assertCanPostTo, joinChannel } from './utils';
 
-// Slack's own per-file ceiling. The body is streamed rather than buffered,
-// so the number no longer has to fit in the process's memory budget.
 const MAX_UPLOAD_BYTES = 1_000_000_000;
 
-// `getUploadURLExternal` and `completeUploadExternal` want raw Slack ids, not
-// the prefixed thread ids the rest of the codebase passes around.
 async function slackDestination(
   target: Target
 ): Promise<{ channel: string; threadTs: string | undefined }> {
@@ -96,9 +92,6 @@ export const uploadFileTool = createTool({
     }
     const destination = await slackDestination(resolved);
 
-    // Streamed straight from the sandbox to Slack's upload URL. Reading the
-    // file into a Buffer first put the whole thing in the process's heap,
-    // which is what OOM-killed the service on 2026-09-12.
     const created = await slack.webClient.files.getUploadURLExternal({
       filename: name,
       length: stat.size,
@@ -106,8 +99,23 @@ export const uploadFileTool = createTool({
     if (!(created.upload_url && created.file_id)) {
       throw new Error('Slack did not return an upload URL.');
     }
-    const body = await sandbox.retryOnDead(() =>
-      sandbox.e2b.files.read(path, { format: 'stream' })
+    const source = await sandbox.retryOnDead(() =>
+      // The read is drained at whatever rate Slack accepts bytes, and the idle
+      // window defaults to the 60s request timeout, so a large file over a
+      // slow link trips it partway through. 0 disables it.
+      sandbox.e2b.files.read(path, {
+        format: 'stream',
+        streamIdleTimeoutMs: 0,
+      })
+    );
+    let uploaded = 0;
+    const body = source.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          uploaded += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      })
     );
     // `duplex: 'half'` is mandatory for a stream body on Node's undici and is
     // missing from the DOM `RequestInit` type. Bun tolerates its absence,
@@ -120,6 +128,16 @@ export const uploadFileTool = createTool({
     const sent = await fetch(created.upload_url, streamed);
     if (!sent.ok) {
       throw new Error(`Upload to Slack failed with ${sent.status}.`);
+    }
+    // A stream E2B reclaims server-side ends cleanly rather than erroring, and
+    // Slack accepts a body shorter than the length it was promised, so a
+    // truncated file otherwise publishes looking intact. Check before
+    // completing: an unfinished upload id expires on its own, a published
+    // corrupt file does not.
+    if (uploaded !== stat.size) {
+      throw new Error(
+        `${path} was truncated in transit: sent ${uploaded} of ${stat.size} bytes. Nothing was posted to Slack, try the upload again.`
+      );
     }
     await slack.webClient.files.completeUploadExternal({
       channel_id: destination.channel,

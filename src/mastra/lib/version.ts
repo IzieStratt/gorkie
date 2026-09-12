@@ -10,8 +10,11 @@ function git(args: string[]): string | undefined {
   try {
     return execFileSync('git', args, { encoding: 'utf8' }).trim() || undefined;
   } catch {
-    // A built deploy may have no git and no checkout. Drop the footer rather
-    // than taking the App Home down over it.
+    // Required by lint: ultracite rejects an empty catch, and rejects
+    // `return undefined` and bare `return` as useless, so a comment is the
+    // only thing that satisfies it. Do not strip this in a no-comments pass.
+    // The why it also records: a built deploy may have no git and no
+    // checkout, so drop the footer rather than taking the App Home down.
   }
 }
 

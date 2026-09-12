@@ -13,8 +13,9 @@ interface MediaPart {
 // are handled by every provider.
 //
 // Scoped to `image/*` on purpose. The OpenAI-compatible user-message converter
-// throws `UnsupportedFunctionalityError` for other media types such as PDF,
-// which would crash the turn rather than merely not working. Widen with care.
+// branches on `image/*`, `audio/*` and `application/pdf` and throws
+// `UnsupportedFunctionalityError` for anything else, which crashes the turn
+// rather than merely not working.
 export const moveToolImages: CompatRule = {
   name: 'move-tool-images',
   applyToPrompt({ prompt }) {

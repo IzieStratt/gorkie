@@ -44,9 +44,6 @@ export const mastra = new Mastra({
         id: 'composite-storage',
         default: postgresStore,
         domains: {
-          // Anchored to the repo root, not cwd: a bare relative path lands
-          // under `src/mastra/public/`, which `mastra build` copies as a
-          // static asset, and the file reaches gigabytes.
           observability: await new DuckDBStore({
             path: join(env.PROJECT_ROOT, 'observability.duckdb'),
           }).getStore('observability'),
@@ -55,21 +52,6 @@ export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        // Dropped in the span constructor, before `deepClean` copies the
-        // payload and before the span holds a reference to it for the rest of
-        // the trace. `customSpanFormatter` cannot substitute: it runs at
-        // export, long after the allocation it would need to prevent.
-        //
-        // A run is readable from `agent_run`, `model_inference` and
-        // `tool_call` alone. `processor_run` is two thirds of all spans and
-        // each one re-records the entire message array, so keeping them costs
-        // a copy of the conversation per processor per step, on a 2GB host
-        // that OOM-killed itself on 2026-09-12. `model_generation` and
-        // `model_step` are brackets around `model_inference` and carry no
-        // content of their own, and `mapping` is step-to-step plumbing.
-        // Together the four are 80% of spans. What this gives up is
-        // per-processor latency and the retry-processor spans that explained
-        // the largest traces.
         excludeSpanTypes: [
           SpanType.MAPPING,
           SpanType.MEMORY_OPERATION,
@@ -87,8 +69,6 @@ export const mastra = new Mastra({
                 new LangfuseFeedbackExporter(),
                 new LangfuseExporter({
                   baseUrl: env.LANGFUSE_BASE_URL,
-                  // Without this, `bun dev` traces land on top of production
-                  // in the same project.
                   environment: env.NODE_ENV,
                   publicKey: env.LANGFUSE_PUBLIC_KEY,
                   realtime: !isProduction,

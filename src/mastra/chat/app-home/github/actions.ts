@@ -256,7 +256,6 @@ export function registerConnect({
   bot.onAction(ids.method, async (event) => {
     const { userId } = event.user;
     const stale = polling.get(userId)?.viewId;
-    // The remembered id carries no hash, so that update stays unguarded.
     const view = viewOf(event.raw) ?? (stale ? { id: stale } : undefined);
     if (!view) {
       logger.warn('[github] a connect modal switched with no view id', {

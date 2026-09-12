@@ -4,8 +4,6 @@ import {
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 
-// Mid-stream provider errors arrive as a bare string, not an `Error`, so
-// matching on `instanceof Error` alone never fires on real traffic.
 function messageOf(error: unknown): string {
   if (typeof error === 'string') {
     return error;
@@ -52,7 +50,6 @@ export function defaultErrorProcessors() {
       maxRetries: 2,
       delayMs: 3000,
       matchers: [
-        // First, or the catch-all below swallows it.
         { match: isTerminalModelError, maxRetries: 0 },
         { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
         {

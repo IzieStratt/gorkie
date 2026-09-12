@@ -28,8 +28,6 @@ if (!existsSync(outputDir)) {
 }
 
 cpSync(join(root, 'patches'), join(outputDir, 'patches'), { recursive: true });
-// `migrate()` reads these at boot, so a build without them starts and then
-// fails on the first query.
 cpSync(join(root, 'drizzle'), join(outputDir, 'drizzle'), { recursive: true });
 
 const outputPkgPath = join(outputDir, 'package.json');

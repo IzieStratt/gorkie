@@ -12,8 +12,6 @@ import { fitHome, type HomeSection } from './limit';
 import { mcpServersBlocks } from './mcp';
 import { scheduledTasksBlocks } from './scheduled-tasks';
 
-// One unreadable row would otherwise take the whole tab with it, including the
-// Disconnect button that is the only way to clear the row.
 async function settled<T>({
   label,
   userId,

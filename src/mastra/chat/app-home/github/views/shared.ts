@@ -45,8 +45,6 @@ const viewAction = z.object({
 
 export type ViewTarget = z.infer<typeof viewAction>['view'];
 
-// Slack rejects an update carrying a stale hash, which is what stops a
-// concurrent action's render from being clobbered.
 export const viewOf = (raw: unknown): ViewTarget | undefined =>
   viewAction.safeParse(raw).data?.view;
 

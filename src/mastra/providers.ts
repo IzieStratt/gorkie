@@ -59,18 +59,16 @@ async function preferLastWorking({
   return matches.length ? [...matches, ...rest] : models;
 }
 
-const orchestratorModels: ModelWithRetries[] = [
-  { ...opencode('glm-5.3-flash', 'orchestrator'), maxRetries: 3 },
-  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
-  {
-    ...opencode('deepseek-v4-flash-vision-exp', 'orchestrator'),
-    maxRetries: 3,
-  },
-  {
-    ...opencode('muse-spark-1.3-contributor', 'orchestrator'),
-    maxRetries: 3,
-  },
-];
+function ladder(agentKey: string): ModelWithRetries[] {
+  return [
+    { ...opencode('glm-5.3-flash', agentKey), maxRetries: 3 },
+    { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
+    { ...opencode('deepseek-v4-flash-vision-exp', agentKey), maxRetries: 3 },
+    { ...opencode('muse-spark-1.3-contributor', agentKey), maxRetries: 3 },
+  ];
+}
+
+const orchestratorModels = ladder('orchestrator');
 
 export const orchestrator = () =>
   preferLastWorking({ agentKey: 'orchestrator', models: orchestratorModels });
@@ -80,26 +78,12 @@ export const summarizer: ModelWithRetries[] = [
   { ...opencode('mimo-v2.5', 'summarizer'), maxRetries: 3 },
 ];
 
-const scoutModels: ModelWithRetries[] = [
-  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
-  {
-    ...opencode('deepseek-v4-flash-vision-exp', 'research'),
-    maxRetries: 3,
-  },
-  { ...opencode('muse-spark-1.3-contributor', 'research'), maxRetries: 3 },
-];
+const scoutModels = ladder('research');
 
 export const scout = () =>
   preferLastWorking({ agentKey: 'research', models: scoutModels });
 
-const explorerModels: ModelWithRetries[] = [
-  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
-  {
-    ...opencode('deepseek-v4-flash-vision-exp', 'explore'),
-    maxRetries: 3,
-  },
-  { ...opencode('muse-spark-1.3-contributor', 'explore'), maxRetries: 3 },
-];
+const explorerModels = ladder('explore');
 
 export const explorer = () =>
   preferLastWorking({ agentKey: 'explore', models: explorerModels });

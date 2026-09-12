@@ -26,10 +26,6 @@ export class LangfuseFeedbackExporter extends BaseExporter {
       body: JSON.stringify({
         comment: numeric ? feedback.comment : String(feedback.value),
         dataType: numeric ? 'NUMERIC' : 'CATEGORICAL',
-        // Deterministic rather than `feedbackId`, so re-clicking a thumb
-        // overwrites the previous score instead of stacking a second one.
-        // This is what makes "has this user already rated this message"
-        // answerable without a table of our own.
         id: `${feedback.traceId}:${user}:${feedback.feedbackType}`,
         metadata: feedback.metadata,
         name: feedback.feedbackType,

@@ -38,9 +38,6 @@ export async function requireSandbox(
   if (!sandbox) {
     throw new Error('No sandbox available.');
   }
-  // Turn end pauses the sandbox but leaves it cached, so anything resolved on
-  // a later turn is paused. `retryOnDead` cannot recover that: a paused
-  // sandbox throws `SandboxNotReadyError`, which matches no dead-error branch.
   await sandbox.ensureRunning();
   return sandbox;
 }
@@ -95,7 +92,16 @@ export const workspace: Workspace = new Workspace({
   }),
   skills: ['.'],
   tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: READ_FILE },
+    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+      name: READ_FILE,
+      mediaTypes: [
+        'image/png',
+        'image/jpeg',
+        'image/webp',
+        'image/gif',
+        'application/pdf',
+      ],
+    },
     [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
       name: WRITE_FILE,
       requireReadBeforeWrite: true,

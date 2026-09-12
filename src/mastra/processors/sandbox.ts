@@ -22,9 +22,6 @@ export const sandbox = {
     if (!requestContext) {
       return;
     }
-    // `execute_command` and the two process tools resolve the sandbox through
-    // Mastra rather than through `getSandbox`, so they never set the flag and
-    // are recognised by name instead.
     if (!(usedSandbox(requestContext) || workspaceToolNames.has(toolName))) {
       return;
     }
@@ -46,8 +43,6 @@ export const sandbox = {
       } catch (error) {
         logger.debug('[sandbox] failed to pause', { error });
       }
-      // `sandboxCacheKey` memoizes into a plain Map that nothing else evicts,
-      // so without this every thread leaves an entry for the process lifetime.
       const { threadId } = channelContext(requestContext);
       if (threadId) {
         workspace.clearSandboxCache(threadId);

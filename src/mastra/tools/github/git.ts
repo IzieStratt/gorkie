@@ -11,8 +11,6 @@ export const repositorySchema = z
     /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/,
     'Expected "owner/repo".'
   )
-  // `.` and `..` match the name pattern and would resolve the checkout path
-  // outside the workdir, so they are excluded the way git excludes them.
   .refine(
     (value) => !['.', '..'].includes(value.split('/')[1]),
     'Expected "owner/repo".'
@@ -73,8 +71,6 @@ export const withCredential = async <T>({
     throw new Error('GitHub is not connected. Ask them to sign in again.');
   }
   return await sandbox.retryOnDead(async () => {
-    // Brokered at the firewall rather than handed to the sandbox, so the token
-    // never exists inside the VM for anything else to read.
     await sandbox.e2b.updateNetwork({
       rules: {
         ...baseRules(),

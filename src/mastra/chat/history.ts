@@ -4,7 +4,7 @@ import { isComment } from './message';
 import { threadState } from './state';
 
 const MAX_MESSAGES = 10;
-const MAX_SCANNED = 200;
+const MAX_SCANNED = 30;
 
 export async function withHistory({
   message,
