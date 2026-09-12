@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
+import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 import { canvasIdSchema } from './utils';
 
@@ -29,7 +30,10 @@ export const lookupCanvasSectionsTool = createTool({
       }),
     },
   },
-  execute: async ({ canvasId, sectionTypes, containsText }) => {
+  execute: async ({ canvasId, sectionTypes, containsText }, context) => {
+    // Once, not per branch: exactly one lookup runs either way.
+    spendSlackCall(context?.requestContext);
+
     if (sectionTypes?.length) {
       const response = await slack.webClient.canvases.sections.lookup({
         canvas_id: canvasId,

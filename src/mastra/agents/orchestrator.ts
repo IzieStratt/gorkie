@@ -27,6 +27,7 @@ import { turnFooter } from '../processors/turn-footer';
 import { workingModel } from '../processors/working-model';
 import { instructions } from '../prompts';
 import { githubStatusPrompt } from '../prompts/github';
+import { reasoningPrompt } from '../prompts/reasoning';
 import {
   orchestrator as orchestratorModel,
   summarizer as summarizerModel,
@@ -87,6 +88,10 @@ const orchestrator = new Agent({
         content: `<mcp_status>The user's MCP server(s) ${failedServers.join(', ')} failed to connect. If they ask about missing tools or the request calls for one of these servers, mention casually that it looks down and they may want to check it in App Home.</mcp_status>`,
       });
     }
+    // Last, after every other system message. A formatting rule competes with
+    // everything after it, and this one governs the shape of the reply itself,
+    // so it goes closest to the output rather than buried mid-prompt.
+    messages.push({ role: 'system' as const, content: reasoningPrompt });
     return messages;
   },
   model: orchestratorModel,

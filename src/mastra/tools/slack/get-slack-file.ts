@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
 import { slack } from '../../chat/client';
+import { spendSlackCall } from '../../lib/slack-budget';
 import { shellQuote } from '../../lib/utils';
 import { input, output } from '../../types/tools/index';
 import { sandboxPath as p, requireSandbox } from '../../workspace';
@@ -58,6 +59,8 @@ export const getSlackFileTool = createTool({
         `Not a Slack file id: "${file}". Pass a Slack file id like F0123ABCD (or a Slack file permalink that contains one). get_slack_file only downloads Slack files; use fetch_url for arbitrary web URLs.`
       );
     }
+
+    spendSlackCall(context?.requestContext);
 
     const fileInfo = (await slack.webClient.files.info({ file: fileId })).file;
     const url = fileInfo?.url_private_download ?? fileInfo?.url_private;

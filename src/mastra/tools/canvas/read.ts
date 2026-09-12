@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
 import { slack } from '../../chat/client';
+import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 import { canvasIdSchema } from './utils';
 
@@ -24,7 +25,9 @@ export const readCanvasTool = createTool({
       }),
     },
   },
-  execute: async ({ canvasId }) => {
+  execute: async ({ canvasId }, context) => {
+    spendSlackCall(context?.requestContext);
+
     const info = await slack.webClient.files.info({ file: canvasId });
     const url = info.file?.url_private_download ?? info.file?.url_private;
     if (!url) {

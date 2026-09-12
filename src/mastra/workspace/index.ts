@@ -116,7 +116,14 @@ export const workspace: Workspace = new Workspace({
     [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { enabled: false },
     [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: GREP },
     [WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT]: { enabled: false },
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { name: EXECUTE_COMMAND },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      name: EXECUTE_COMMAND,
+      // Without this the default is the agent's own abort signal, so every
+      // `background: true` process is killed the moment the turn ends. Mastra
+      // documents `false` as the setting for cloud sandboxes like E2B, where
+      // the process is supposed to outlive the agent that started it.
+      backgroundProcesses: { abortSignal: false },
+    },
     [WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]: {
       name: GET_PROCESS_OUTPUT,
     },

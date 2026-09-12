@@ -3,7 +3,6 @@ import { listMCPServers } from '../../db/queries/mcps';
 import { getGitHubSettings, getInstructions } from '../../db/queries/settings';
 import { countInstallations } from '../../lib/github';
 import { logger } from '../../lib/logger';
-import { commit } from '../../lib/version';
 import { slack } from '../client';
 import { content } from '../content';
 import { githubBlocks } from './github';
@@ -44,10 +43,6 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
   const installations =
     credential?.kind === 'app' ? await countInstallations(credential.token) : 0;
 
-  const build = commit
-    ? `Running on ${commit.url ? `<${commit.url}|\`${commit.sha}\`>` : `\`${commit.sha}\``}${commit.subject ? `  ·  ${commit.subject}` : ''}`
-    : undefined;
-
   const sections: HomeSection[] = [
     { fixed: [...content.home.blocks, { type: 'divider' }] },
     customInstructionsBlocks(instructions),
@@ -60,15 +55,6 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
     }),
     mcpServersBlocks(mcpServers ?? []),
     ...(scheduled ? [scheduled] : []),
-    ...(build
-      ? [
-          {
-            fixed: [
-              { type: 'context', elements: [{ type: 'mrkdwn', text: build }] },
-            ],
-          },
-        ]
-      : []),
   ];
 
   return { type: 'home', blocks: fitHome(sections) };

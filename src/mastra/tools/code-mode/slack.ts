@@ -68,7 +68,7 @@ async function createCodeModeInstance({
     : slackCodeTools;
   const modeConfig = {
     id: 'slack',
-    timeout: sandboxConfig.timeout,
+    timeout: sandboxConfig.executionTimeout,
     tools,
   };
   const mode = createCodeMode(modeConfig, transport);

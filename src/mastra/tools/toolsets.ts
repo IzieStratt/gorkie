@@ -17,6 +17,7 @@ export async function orchestratorTools() {
     read_conversation_history: slackTools.read_conversation_history,
     get_user: slackTools.get_user,
     get_permalink: slackTools.get_permalink,
+    join_thread: slackTools.join_thread,
     leave_thread: slackTools.leave_thread,
     summarize_thread: slackTools.summarize_thread,
     search_web: searchWebTool,

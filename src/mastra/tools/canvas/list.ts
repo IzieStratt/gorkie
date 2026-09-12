@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
+import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 
 const canvasFile = z
@@ -79,6 +80,8 @@ export const listCanvasesTool = createTool({
     if (scope === 'channel' && !id) {
       throw new Error('No channel to list canvases from.');
     }
+
+    spendSlackCall(context?.requestContext);
 
     const response = await slack.webClient.files.list({
       types: 'canvas',

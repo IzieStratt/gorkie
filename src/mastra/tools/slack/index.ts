@@ -2,6 +2,7 @@ import { getChannelInfoTool } from './get-channel-info';
 import { getPermalinkTool } from './get-permalink';
 import { getSlackFileTool } from './get-slack-file';
 import { getUserTool } from './get-user';
+import { joinThreadTool } from './join-thread';
 import { leaveThreadTool } from './leave-thread';
 import { listChannelsTool } from './list-channels';
 import { listThreadsTool } from './list-threads';
@@ -24,6 +25,7 @@ export const slackTools = {
   get_slack_file: getSlackFileTool,
   upload_file: uploadFileTool,
   post_message: postMessageTool,
+  join_thread: joinThreadTool,
   leave_thread: leaveThreadTool,
   summarize_thread: summarizeThreadTool,
 };

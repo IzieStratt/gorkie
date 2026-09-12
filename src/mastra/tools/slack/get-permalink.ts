@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { channelContext } from '../../lib/context';
 import { chatChannelId, parseSlackId } from '../../lib/ids';
+import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 
 export const getPermalinkTool = createTool({
@@ -35,6 +36,8 @@ export const getPermalinkTool = createTool({
     if (!ts) {
       throw new Error(`${messageId} is not a Slack message id.`);
     }
+    spendSlackCall(context?.requestContext);
+
     const response = await slack.webClient.chat.getPermalink({
       channel,
       message_ts: ts,
