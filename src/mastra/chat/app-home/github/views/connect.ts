@@ -1,5 +1,6 @@
 import type { ModalView, PlainTextOption } from '@slack/web-api';
-import { type DeviceLogin, GITHUB_INSTALL_URL } from '../../../../lib/github';
+import { env } from '@/env';
+import type { DeviceLogin } from '../../../../lib/github';
 import { ids } from '../ids';
 import { type ConnectMethod, option, text } from './shared';
 
@@ -15,7 +16,7 @@ export const connectView = ({
   const app = device
     ? [
         text(
-          `*1.* <${GITHUB_INSTALL_URL}|Choose which repositories Gorkie may use>. Pick "Only select repositories" to keep it narrow.`
+          `*1.* <${`https://github.com/apps/${env.GITHUB_APP_SLUG}/installations/new`}|Choose which repositories Gorkie may use>. Pick "Only select repositories" to keep it narrow.`
         ),
         text(
           `*2.* Open <${device.verificationUri}|${device.verificationUri}> and enter this code:`

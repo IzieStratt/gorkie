@@ -61,7 +61,7 @@ async function preferLastWorking({
 
 const orchestratorModels: ModelWithRetries[] = [
   { ...opencode('glm-5.3-flash', 'orchestrator'), maxRetries: 3 },
-  { model: hackclub('openai/gpt-5.6-luna'), maxRetries: 3 },
+  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
   {
     ...opencode('deepseek-v4-flash-vision-exp', 'orchestrator'),
     maxRetries: 3,
@@ -81,7 +81,7 @@ export const summarizer: ModelWithRetries[] = [
 ];
 
 const scoutModels: ModelWithRetries[] = [
-  { model: hackclub('openai/gpt-5.6-luna'), maxRetries: 3 },
+  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
   {
     ...opencode('deepseek-v4-flash-vision-exp', 'research'),
     maxRetries: 3,
@@ -93,7 +93,7 @@ export const scout = () =>
   preferLastWorking({ agentKey: 'research', models: scoutModels });
 
 const explorerModels: ModelWithRetries[] = [
-  { model: hackclub('openai/gpt-5.6-luna'), maxRetries: 3 },
+  { model: hackclub('z-ai/glm-5.3-flash'), maxRetries: 3 },
   {
     ...opencode('deepseek-v4-flash-vision-exp', 'explore'),
     maxRetries: 3,

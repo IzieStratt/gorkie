@@ -2,8 +2,8 @@
 
 This project is a customizable AI assistant for Slack, built on Bun,
 TypeScript, Mastra channels, Chat SDK's Slack adapter in Socket Mode, E2B
-sandboxes, Postgres, and Mastra observability (local DuckDB plus, when
-configured, Mastra Platform).
+sandboxes, Postgres, and Mastra observability (local DuckDB in development,
+plus Langfuse).
 
 ## CRITICAL: Load the `mastra` skill first
 
@@ -43,14 +43,18 @@ The agent brain runs on the host. Code execution runs in a per-thread **E2B** sa
 
 Storage is **Postgres** for agent memory and channel state. Long-term memory uses
 thread-scoped **Observational Memory**.
-Observability traces are stored in a local DuckDB file (`observability.duckdb`,
-anchored to `env.MASTRA_PROJECT_ROOT` rather than cwd, wired via `MastraStorageExporter` on a `MastraCompositeStore`
-domain override in `src/mastra/index.ts`) and, since `MASTRA_PLATFORM_ACCESS_TOKEN`
-and `MASTRA_PROJECT_ID` are required, also exported to Mastra Platform via
-`MastraPlatformExporter`. DuckDB is single-writer, so a running `mastra
-dev`/`mastra start` holds the lock; query it read-only while the server is
-stopped, or use `mastra api trace ...` against whatever instance the user
-already has running instead (see Boundaries).
+Observability traces go to **Langfuse** (`@mastra/langfuse`), configured in
+`src/mastra/index.ts`. In development they are also written to a local DuckDB
+file (`observability.duckdb`, anchored to `env.PROJECT_ROOT` rather than cwd,
+wired via `MastraStorageExporter` on a `MastraCompositeStore` domain override).
+DuckDB is single-writer, so a running `mastra dev`/`mastra start` holds the
+lock; query it read-only while the server is stopped.
+
+`slackIdentity` (`src/mastra/observability/slack-identity.ts`) stamps the Slack
+identity onto the root span, so `sessionId` is the Slack thread and every turn
+of a conversation collapses into one Langfuse session. `LangfuseFeedbackExporter`
+forwards feedback as Langfuse scores, which `@mastra/langfuse` does not do
+itself because it implements no `onFeedbackEvent` handler.
 
 ## Boundaries
 

@@ -2,11 +2,11 @@ import { logger } from '../../lib/logger';
 import { memoryThread } from '../../lib/memory';
 import type { CommandHandler } from '../../types';
 
-export const stop: CommandHandler = async ({ message, thread }) => {
+export async function stopThread(threadId: string): Promise<boolean> {
   const { default: orchestrator } = await import('../../agents/orchestrator');
   const threadMemory = await memoryThread({
     agent: orchestrator,
-    externalThreadId: thread.id,
+    externalThreadId: threadId,
   }).catch(() => undefined);
   const scope = threadMemory
     ? { threadId: threadMemory.id, resourceId: threadMemory.resourceId }
@@ -15,12 +15,11 @@ export const stop: CommandHandler = async ({ message, thread }) => {
     ? orchestrator.getActiveThreadRunId(scope)
     : undefined;
   const manager = orchestrator.getMastraInstance()?.backgroundTaskManager;
-  const backgroundTasks = await (async () => {
-    if (!(scope && manager)) {
-      return [];
-    }
+
+  let backgroundTasks: { id: string }[] = [];
+  if (scope && manager) {
     try {
-      return (
+      backgroundTasks = (
         await manager.listTasks({
           agentId: orchestrator.id,
           threadId: scope.threadId,
@@ -31,27 +30,14 @@ export const stop: CommandHandler = async ({ message, thread }) => {
     } catch (error) {
       logger.warn('[commands] Failed to list background tasks for stop', {
         error,
-        threadId: thread.id,
+        threadId,
       });
-      return [];
     }
-  })();
-
-  if (!(scope && (activeRunId || backgroundTasks.length > 0))) {
-    await thread
-      .postEphemeral(message.author, 'Nothing to stop right now.', {
-        fallbackToDM: false,
-      })
-      .catch((error: unknown) => {
-        logger.warn('[commands] Failed to post stop feedback', {
-          error,
-          threadId: thread.id,
-          userId: message.author.userId,
-        });
-      });
-    return;
   }
 
+  if (!(scope && (activeRunId || backgroundTasks.length > 0))) {
+    return false;
+  }
   if (activeRunId) {
     orchestrator.abortThreadStream(scope);
   }
@@ -61,9 +47,27 @@ export const stop: CommandHandler = async ({ message, thread }) => {
     );
     if (cancellations.some(({ status }) => status === 'rejected')) {
       logger.warn('[commands] Some background tasks failed to stop', {
-        threadId: thread.id,
+        threadId,
       });
     }
   }
-  await thread.post({ markdown: '_Stopped._' });
+  return true;
+}
+
+export const stop: CommandHandler = async ({ message, thread }) => {
+  if (await stopThread(thread.id)) {
+    await thread.post({ markdown: '_Stopped._' });
+    return;
+  }
+  await thread
+    .postEphemeral(message.author, 'Nothing to stop right now.', {
+      fallbackToDM: false,
+    })
+    .catch((error: unknown) => {
+      logger.warn('[commands] Failed to post stop feedback', {
+        error,
+        threadId: thread.id,
+        userId: message.author.userId,
+      });
+    });
 };

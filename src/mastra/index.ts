@@ -72,9 +72,12 @@ export const mastra = new Mastra({
         // the largest traces.
         excludeSpanTypes: [
           SpanType.MAPPING,
+          SpanType.MEMORY_OPERATION,
           SpanType.MODEL_GENERATION,
           SpanType.MODEL_STEP,
           SpanType.PROCESSOR_RUN,
+          SpanType.SKILL_ACTION,
+          SpanType.WORKSPACE_ACTION,
         ],
         serviceName: 'orchestrator',
         exporters: [
