@@ -30,6 +30,23 @@ describe('moveAsterisksAfterMarkdownLinks', () => {
       moveAsterisksAfterMarkdownLinks('[label](https://example.com/*')
     ).toBe('[label](https://example.com/*');
   });
+
+  test('leaves bracket-less ](dest) plain text untouched', () => {
+    expect(moveAsterisksAfterMarkdownLinks('literal ](path*) here')).toBe(
+      'literal ](path*) here'
+    );
+  });
+
+  test('leaves escaped brackets literal', () => {
+    expect(moveAsterisksAfterMarkdownLinks(String.raw`\[label](path*)`)).toBe(
+      String.raw`\[label](path*)`
+    );
+    expect(
+      moveAsterisksAfterMarkdownLinks(
+        String.raw`[escaped \] label](https://example.com/*)`
+      )
+    ).toBe(String.raw`[escaped \] label](https://example.com/)*`);
+  });
 });
 
 describe('moveAsterisksAfterMarkdownLinksInStream', () => {

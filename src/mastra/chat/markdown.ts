@@ -3,6 +3,8 @@ import type { AdapterPostableMessage, StreamChunk } from 'chat';
 class MarkdownLinkNormalizer {
   private bufferedLink = '';
   private parenthesisDepth = 0;
+  private sawOpenBracket = false;
+  private trailingBackslashes = 0;
   private readonly state = new Set<'pendingCloseBracket'>();
 
   push(markdown: string): string {
@@ -15,12 +17,27 @@ class MarkdownLinkNormalizer {
             this.bufferedLink = '](';
             this.parenthesisDepth = 1;
             this.state.delete('pendingCloseBracket');
+            this.trailingBackslashes = 0;
             continue;
           }
           normalized += ']';
           this.state.delete('pendingCloseBracket');
+          this.trailingBackslashes = 0;
         }
-        if (character === ']') {
+        const escaped = this.trailingBackslashes % 2 === 1;
+        if (character === '\\') {
+          this.trailingBackslashes += 1;
+          normalized += character;
+          continue;
+        }
+        this.trailingBackslashes = 0;
+        if (character === '[' && !escaped) {
+          this.sawOpenBracket = true;
+          normalized += character;
+          continue;
+        }
+        if (character === ']' && !escaped && this.sawOpenBracket) {
+          this.sawOpenBracket = false;
           this.state.add('pendingCloseBracket');
           continue;
         }
