@@ -1,4 +1,3 @@
-import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
@@ -257,97 +256,6 @@ async function workspaceSearch({
   });
 }
 
-async function search({
-  cursor,
-  query,
-  requestContext,
-}: {
-  cursor?: string;
-  query: string;
-  requestContext?: RequestContext;
-}) {
-  const { messageId, threadId } = channelContext(requestContext);
-  const thread = threadId ? chat().thread(threadId) : undefined;
-  const actionToken = (await threadState(thread))?.searchToken;
-  const fallbackToken = env.SLACK_SEARCH_USER_TOKEN;
-
-  const separator = cursor ? cursor.indexOf(':') : -1;
-  const pinned = cursor
-    ? identitySchema.safeParse(separator > 0 ? cursor.slice(0, separator) : '')
-    : undefined;
-  if (cursor && !pinned?.success) {
-    throw new Error(
-      'That cursor did not come from search_slack. Run the search again without a cursor.'
-    );
-  }
-  // A cursor is only meaningful to the identity that issued it, so pagination
-  // stays pinned to that identity instead of silently resuming as someone else.
-  const identity = pinned?.success ? pinned.data : undefined;
-  const slackCursor = cursor?.slice(separator + 1);
-
-  if (identity === 'workspace') {
-    return workspaceSearch({
-      cursor: slackCursor,
-      messageId,
-      query,
-      threadId,
-      token: fallbackToken,
-    });
-  }
-
-  if (!(thread && actionToken)) {
-    if (identity) {
-      throw new Error(
-        'The Slack search token behind that result page expired. Run the search again without a cursor.'
-      );
-    }
-    return workspaceSearch({
-      messageId,
-      query,
-      threadId,
-      token: fallbackToken,
-    });
-  }
-
-  try {
-    return await toOutput({
-      response: await runSearch({
-        actionToken,
-        cursor: slackCursor,
-        query,
-        token: env.SLACK_BOT_TOKEN,
-      }),
-      searchedAs: 'requester',
-      threadId,
-    });
-  } catch (error) {
-    const parsed = slackErrorSchema.safeParse(error);
-    const code = parsed.success ? parsed.data.data?.error : undefined;
-    const reason = String(error);
-    const tokenFailure =
-      code === 'invalid_action_token' ||
-      code === 'token_expired' ||
-      reason.includes('invalid_action_token') ||
-      reason.includes('token_expired');
-    if (!tokenFailure) {
-      throw error;
-    }
-    await thread.setState({ searchToken: undefined });
-    if (cursor) {
-      throw new Error(
-        'The Slack search token expired part way through this result set. Run the search again without a cursor.',
-        { cause: error }
-      );
-    }
-    return workspaceSearch({
-      messageId,
-      query,
-      threadId,
-      token: fallbackToken,
-    });
-  }
-}
-
 export const searchSlackTool = createTool({
   id: 'search_slack',
   description:
@@ -390,8 +298,89 @@ export const searchSlackTool = createTool({
       }),
     },
   },
-  execute: ({ query, cursor }, context) => {
+  execute: async ({ query, cursor }, context) => {
     spendSlackCall(context?.requestContext);
-    return search({ cursor, query, requestContext: context?.requestContext });
+    const { messageId, threadId } = channelContext(context?.requestContext);
+    const thread = threadId ? chat().thread(threadId) : undefined;
+    const actionToken = (await threadState(thread))?.searchToken;
+    const fallbackToken = env.SLACK_SEARCH_USER_TOKEN;
+
+    const separator = cursor ? cursor.indexOf(':') : -1;
+    const pinned = cursor
+      ? identitySchema.safeParse(
+          separator > 0 ? cursor.slice(0, separator) : ''
+        )
+      : undefined;
+    if (cursor && !pinned?.success) {
+      throw new Error(
+        'That cursor did not come from search_slack. Run the search again without a cursor.'
+      );
+    }
+    // A cursor is only meaningful to the identity that issued it, so pagination
+    // stays pinned to that identity instead of silently resuming as someone else.
+    const identity = pinned?.success ? pinned.data : undefined;
+    const slackCursor = cursor?.slice(separator + 1);
+
+    if (identity === 'workspace') {
+      return workspaceSearch({
+        cursor: slackCursor,
+        messageId,
+        query,
+        threadId,
+        token: fallbackToken,
+      });
+    }
+
+    if (!(thread && actionToken)) {
+      if (identity) {
+        throw new Error(
+          'The Slack search token behind that result page expired. Run the search again without a cursor.'
+        );
+      }
+      return workspaceSearch({
+        messageId,
+        query,
+        threadId,
+        token: fallbackToken,
+      });
+    }
+
+    try {
+      return await toOutput({
+        response: await runSearch({
+          actionToken,
+          cursor: slackCursor,
+          query,
+          token: env.SLACK_BOT_TOKEN,
+        }),
+        searchedAs: 'requester',
+        threadId,
+      });
+    } catch (error) {
+      const parsed = slackErrorSchema.safeParse(error);
+      const code = parsed.success ? parsed.data.data?.error : undefined;
+      const reason = String(error);
+      const tokenFailure =
+        code === 'invalid_action_token' ||
+        code === 'token_expired' ||
+        reason.includes('invalid_action_token') ||
+        reason.includes('token_expired');
+      if (!tokenFailure) {
+        throw error;
+      }
+      await thread.setState({ searchToken: undefined });
+      if (cursor) {
+        throw new Error(
+          'The Slack search token expired part way through this result set. Run the search again without a cursor.',
+          { cause: error }
+        );
+      }
+      return workspaceSearch({
+        messageId,
+        query,
+        threadId,
+        token: fallbackToken,
+      });
+    }
   },
 });
