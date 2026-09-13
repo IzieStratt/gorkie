@@ -61,10 +61,12 @@ export const workspace: Workspace = new Workspace({
   name: 'Workspace',
   sandbox: ({ requestContext }) => {
     const { threadId } = channelContext(requestContext);
-    if (!threadId) {
-      throw new Error('No thread id available for workspace.');
-    }
-    return createSandbox(threadId);
+    // Degrade instead of throw. Mastra can resolve workspace instructions
+    // before a thread is bound (and a scheduled/idle wake may arrive without
+    // channel context), and throwing here failed the whole turn and every
+    // fallback model. A contextless run gets a shared scratch sandbox; real
+    // turns still key on their own thread, so sandbox continuity is unchanged.
+    return createSandbox(threadId ?? '__unscoped__');
   },
   filesystem: async ({ requestContext }) => {
     const sandbox = await getSandbox(requestContext);
@@ -78,7 +80,7 @@ export const workspace: Workspace = new Workspace({
     });
   },
   sandboxCacheKey: ({ requestContext }) =>
-    channelContext(requestContext).threadId,
+    channelContext(requestContext).threadId ?? '__unscoped__',
   skillSource: new LocalSkillSource({
     basePath:
       [
