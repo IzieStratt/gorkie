@@ -53,3 +53,22 @@ export async function countInstallations(token: string): Promise<number> {
       ?.total_count ?? 0
   );
 }
+
+export async function repoPushAccess({
+  repository,
+  token,
+}: {
+  repository: string;
+  token: string;
+}): Promise<{ push: boolean } | { error: string }> {
+  const body = await githubApi({ path: `/repos/${repository}`, token });
+  if ('error' in body) {
+    return body;
+  }
+  // `permissions` is present only on an authenticated read, and `push` is the
+  // flag that decides push-a-branch-here vs fork-first. Absent means no write.
+  const push = z
+    .object({ permissions: z.object({ push: z.boolean() }).optional() })
+    .safeParse(body.data).data?.permissions?.push;
+  return { push: push === true };
+}

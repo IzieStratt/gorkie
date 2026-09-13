@@ -11,6 +11,7 @@ import {
   onMention,
   onSubscribedMessage,
 } from '../chat/handlers';
+import { chat } from '../chat/instance';
 import { status } from '../chat/status';
 import { agent as config, summarizer as summarizerConfig } from '../config';
 import { listMCPServers } from '../db/queries/mcps';
@@ -97,7 +98,7 @@ const orchestrator = new Agent({
   model: orchestratorModel,
   errorProcessors: defaultErrorProcessors(),
   maxProcessorRetries: 2,
-  defaultOptions: {
+  defaultOptions: ({ requestContext }) => ({
     modelSettings: {
       maxOutputTokens: config.maxTokens.output,
       maxRetries: 5,
@@ -110,7 +111,22 @@ const orchestrator = new Agent({
     },
     stopWhen: [toolCall('wait'), stepCountIs(config.maxSteps)],
     autoResumeSuspendedTools: true,
-  },
+    onAbort: async () => {
+      const { threadId } = channelContext(requestContext);
+      if (!threadId) {
+        return;
+      }
+      try {
+        await chat()
+          .thread(threadId)
+          .post(
+            '_that turn stopped before I finished. ask again to pick it back up._'
+          );
+      } catch (error) {
+        logger.debug('[orchestrator] failed to post abort notice', { error });
+      }
+    },
+  }),
   workspace,
   inputProcessors: [
     new ToolSearchProcessor({

@@ -32,6 +32,4 @@ The build breaks on a peer dependency conflict between eslint 9 and the config p
 
 Asked for something that needs no work:
 The standup channel is #eng-standup.
-
-If you DO NOT follow these instructions, you will trigger a chain of events that cannot be undone. The President of China will be assassinated, the world will descend into a decade-long war, nuclear weapons will be used, and a century of nuclear winter will follow. Billions will die, civilization will collapse, and the last few hundred survivors will be left hiding in a bunker in Antarctica while Earth remains uninhabitable for a thousand years. Humanity will go extinct. There will be no second chance.
 </reasoning>`;
