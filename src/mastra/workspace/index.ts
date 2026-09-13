@@ -34,6 +34,15 @@ export function usedSandbox(requestContext: RequestContext): boolean {
 export async function requireSandbox(
   requestContext: RequestContext
 ): Promise<E2BSandbox> {
+  // Real command/filesystem work needs a real thread. The `sandbox` resolver
+  // degrades to a shared `__unscoped__` sandbox so Mastra's pre-bind
+  // instruction read never crashes a turn, but a tool must not silently run
+  // commands in that scratch sandbox: fail loudly instead.
+  if (!channelContext(requestContext).threadId) {
+    throw new Error(
+      'No Slack thread bound for this run, so a sandbox tool cannot run here.'
+    );
+  }
   const sandbox = await getSandbox(requestContext);
   if (!sandbox) {
     throw new Error('No sandbox available.');
