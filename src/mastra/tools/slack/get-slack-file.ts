@@ -3,10 +3,12 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { env } from '@/env';
 import { slack } from '../../chat/client';
+import { channelContext } from '../../lib/context';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { shellQuote } from '../../lib/utils';
 import { input, output } from '../../types/tools/index';
 import { sandboxPath as p, requireSandbox } from '../../workspace';
+import { assertReadableResource } from './utils';
 
 function formatBytes(value: number): string {
   if (value < 1024 * 1024) {
@@ -63,6 +65,10 @@ export const getSlackFileTool = createTool({
     spendSlackCall(context?.requestContext);
 
     const fileInfo = (await slack.webClient.files.info({ file: fileId })).file;
+    await assertReadableResource({
+      channelIds: [...(fileInfo?.channels ?? []), ...(fileInfo?.groups ?? [])],
+      currentThreadId: channelContext(context.requestContext).threadId,
+    });
     const url = fileInfo?.url_private_download ?? fileInfo?.url_private;
     if (!url) {
       throw new Error(

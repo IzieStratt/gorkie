@@ -27,7 +27,7 @@ import { moveToolImages } from '../processors/tool-media';
 import { turnFooter } from '../processors/turn-footer';
 import { workingModel } from '../processors/working-model';
 import { instructions } from '../prompts';
-import { githubStatusPrompt } from '../prompts/github';
+import { githubPrompt } from '../prompts/github';
 import { reasoningPrompt } from '../prompts/reasoning';
 import {
   orchestrator as orchestratorModel,
@@ -49,7 +49,7 @@ const orchestrator = new Agent({
       { role: 'system' as const, content: await workspaceCodeModePrompt() },
     ];
     const { isDM, userId } = channelContext(requestContext);
-    const github = await githubStatusPrompt({
+    const github = await githubPrompt({
       isDM: isDM === true,
       requestContext,
       userId,

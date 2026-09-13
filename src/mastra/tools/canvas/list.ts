@@ -5,6 +5,7 @@ import { channelContext } from '../../lib/context';
 import { rawId } from '../../lib/ids';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
+import { assertReadableChannel } from '../slack/utils';
 
 const canvasFile = z
   .looseObject({
@@ -79,6 +80,12 @@ export const listCanvasesTool = createTool({
         : (channelId ?? channelContext(context?.requestContext).channelId);
     if (scope === 'channel' && !id) {
       throw new Error('No channel to list canvases from.');
+    }
+    if (id) {
+      await assertReadableChannel({
+        channelId: id,
+        currentThreadId: channelContext(context?.requestContext).threadId,
+      });
     }
 
     spendSlackCall(context?.requestContext);

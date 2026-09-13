@@ -12,18 +12,26 @@ export function customInstructionsBlocks(
   return {
     fixed: [
       {
-        type: 'header',
-        text: { type: 'plain_text', text: 'Custom Instructions' },
-      },
-      {
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: preview
-            ? `>${preview.replaceAll('\n', '\n>')}`
-            : '_No custom instructions set. Gorkie uses its default personality._',
-        },
+        text: { type: 'mrkdwn', text: '*Custom Instructions*' },
       },
+      preview
+        ? {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `>${preview.replaceAll('\n', '\n>')}`,
+            },
+          }
+        : {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: 'none yet. gorkie uses its default personality. add one to shape how it replies to you.',
+              },
+            ],
+          },
       {
         type: 'actions',
         elements: [

@@ -28,7 +28,7 @@ export function mcpServersBlocks(
           elements: [
             {
               type: 'mrkdwn',
-              text: 'None yet. Add one to give Gorkie extra tools, just for you.',
+              text: 'none yet. add one to give gorkie extra tools, just for you.',
             },
           ],
         },
@@ -81,8 +81,8 @@ export function mcpServersBlocks(
             confirm: {
               title: { type: 'plain_text', text: 'Remove server?' },
               text: {
-                type: 'mrkdwn',
-                text: `This removes *${server.name}* and its stored token.`,
+                type: 'plain_text',
+                text: `This removes ${server.name} and its stored token.`,
               },
               confirm: { type: 'plain_text', text: 'Remove' },
               deny: { type: 'plain_text', text: 'Keep' },

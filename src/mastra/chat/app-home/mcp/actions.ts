@@ -2,9 +2,11 @@ import { Modal, TextInput } from 'chat';
 import {
   listMCPServers,
   removeMCPServer,
+  setMCPServerError,
   setMCPServerPermission,
   upsertMCPServer,
 } from '../../../db/queries/mcps';
+import { logger } from '../../../lib/logger';
 import { findMCPUrlError } from '../../../mcp/security';
 import { findMCPConnectionError } from '../../../mcp/user-servers';
 import { mcpServerSchema } from '../../../types';
@@ -84,13 +86,6 @@ async function addServer({
   if (urlError) {
     return { action: 'errors' as const, errors: { url: urlError } };
   }
-  const connectionError = await findMCPConnectionError({
-    userId,
-    server: parsed.data,
-  });
-  if (connectionError) {
-    return { action: 'errors' as const, errors: { url: connectionError } };
-  }
   const result = await upsertMCPServer({
     userId,
     server: parsed.data,
@@ -103,6 +98,29 @@ async function addServer({
     };
   }
   await publishHome(userId);
+
+  // Probe after storing, not before: the connection check can take longer than
+  // Slack's modal-submit ack window, which made a slow or unauthenticated
+  // server show a generic failure while the add actually went through. Now the
+  // add always succeeds fast and a failed probe lands as the row's lastError,
+  // rendered on the next Home publish, matching how reconnects report status.
+  const server = parsed.data;
+  findMCPConnectionError({ userId, server })
+    .then(async (connectionError) => {
+      await setMCPServerError({
+        userId,
+        name: server.name,
+        error: connectionError ?? null,
+      });
+      await publishHome(userId);
+    })
+    .catch((error: unknown) => {
+      logger.debug('[mcp] background connection probe failed', {
+        error,
+        name: server.name,
+        userId,
+      });
+    });
 }
 
 export function registerMCPServers({

@@ -5,6 +5,7 @@ import { channelContext } from '../../lib/context';
 import { chatChannelId, parseSlackId } from '../../lib/ids';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
+import { assertReadableChannel } from './utils';
 
 export const getPermalinkTool = createTool({
   id: 'get_permalink',
@@ -36,6 +37,10 @@ export const getPermalinkTool = createTool({
     if (!ts) {
       throw new Error(`${messageId} is not a Slack message id.`);
     }
+    await assertReadableChannel({
+      channelId: chatChannelId(channel),
+      currentThreadId: channelContext(context?.requestContext).threadId,
+    });
     spendSlackCall(context?.requestContext);
 
     const response = await slack.webClient.chat.getPermalink({

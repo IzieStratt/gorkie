@@ -24,18 +24,24 @@ function assertMinimumInterval(cron: string, timezone?: string): void {
   }
 }
 
+const minMinutes = scheduledTasks.minInterval / 60_000;
+
+const createDescription =
+  minMinutes > 0
+    ? `Create a recurring schedule for the current Slack conversation. Use a valid cron expression and optional IANA timezone. Minimum interval is ${minMinutes} minutes between fires, each run costs model credits: never request a faster cadence, refuse and offer the nearest ${minMinutes}-minute-or-slower option instead.`
+    : 'Create a recurring schedule for the current Slack conversation. Use a valid cron expression and optional IANA timezone. No minimum interval in this environment; any cadence is allowed.';
+
+const cronDescription =
+  minMinutes > 0
+    ? `Cron expression for when to run. Minimum interval: ${minMinutes} minutes between fires.`
+    : 'Cron expression for when to run. Any cadence is allowed in this environment.';
+
 export const createScheduledTaskTool = createTool({
   id: 'create_scheduled_task',
-  description:
-    'Create a recurring schedule for the current Slack conversation. Use a valid cron expression and optional IANA timezone. Minimum interval is 30 minutes between fires, each run costs model credits: never request a faster cadence, refuse and offer the nearest 30-minute-or-slower option instead.',
+  description: createDescription,
   inputSchema: input({
     task: z.string().min(1).describe('Prompt to run on the schedule.'),
-    cron: z
-      .string()
-      .min(1)
-      .describe(
-        'Cron expression for when to run. Minimum interval: 30 minutes between fires.'
-      ),
+    cron: z.string().min(1).describe(cronDescription),
     name: z
       .string()
       .min(1)
@@ -69,6 +75,17 @@ export const createScheduledTaskTool = createTool({
         prompt: task,
         threadId,
         resourceId,
+        signalType: 'notification',
+        // Carry the Slack channel context onto the woken turn. Without it the
+        // fire has no threadId, and the workspace sandbox resolver
+        // (channelContext(requestContext).threadId) throws "No thread id
+        // available for workspace", failing every model. This is why scheduled
+        // tasks failed while `wait` worked: `wait` already passed this.
+        ifActive: { behavior: 'persist' },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { requestContext: context.requestContext?.toJSON() },
+        },
         ...(name ? { name } : {}),
         ...(timezone ? { timezone } : {}),
       }),

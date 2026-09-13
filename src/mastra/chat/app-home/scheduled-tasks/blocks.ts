@@ -14,8 +14,8 @@ export async function scheduledTasksBlocks(
   });
   const tasks = schedules.filter(isAgentSchedule);
   const header = {
-    type: 'header',
-    text: { type: 'plain_text', text: 'Scheduled Tasks' },
+    type: 'section',
+    text: { type: 'mrkdwn', text: '*Scheduled Tasks*' },
   };
 
   if (tasks.length === 0) {
@@ -23,11 +23,13 @@ export async function scheduledTasksBlocks(
       fixed: [
         header,
         {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '_No scheduled tasks yet. Ask Gorkie to set one up in any conversation._',
-          },
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: 'none yet. ask gorkie to schedule one for you in any conversation.',
+            },
+          ],
         },
       ],
     };

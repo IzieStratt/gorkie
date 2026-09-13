@@ -64,8 +64,9 @@ export const readConversationHistoryTool = createTool({
     const tid = suppliedThreadId
       ? slackThreadId({ channelId, threadId: suppliedThreadId })
       : undefined;
-    const resolvedChannelId =
-      channelId ?? (tid ? slack.decodeThreadId(tid).channel : undefined);
+    const resolvedChannelId = tid
+      ? slack.decodeThreadId(tid).channel
+      : channelId;
     if (!resolvedChannelId) {
       throw new Error('Pass channelId or threadId, or run inside a thread.');
     }
