@@ -55,7 +55,7 @@ export const researchAgent = new Agent({
       maxOutputTokens: 16_384,
       maxRetries: 5,
       reasoning: 'medium',
-      timeout: { stepMs: config.stepTimeoutMs },
+      timeout: config.modelTimeout,
     },
     stopWhen: stepCountIs(config.maxSteps),
     autoResumeSuspendedTools: true,

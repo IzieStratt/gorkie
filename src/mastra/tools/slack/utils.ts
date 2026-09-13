@@ -28,6 +28,31 @@ export async function assertReadableChannel({
   );
 }
 
+export async function assertReadableResource({
+  channelIds,
+  currentThreadId,
+}: {
+  channelIds: string[];
+  currentThreadId?: string;
+}): Promise<void> {
+  if (channelIds.length === 0) {
+    throw new Error('This Slack resource is not associated with a channel.');
+  }
+
+  const checks = await Promise.allSettled(
+    channelIds.map((channelId) =>
+      assertReadableChannel({ channelId, currentThreadId })
+    )
+  );
+  if (checks.some((check) => check.status === 'fulfilled')) {
+    return;
+  }
+
+  throw new Error(
+    'Reading or editing Slack resources from another private conversation is not allowed.'
+  );
+}
+
 export function assertCanPostTo({
   target,
   ctx,
@@ -35,12 +60,26 @@ export function assertCanPostTo({
   target: Target;
   ctx: ChannelContext;
 }): void {
-  if (
-    target.type === 'user' &&
-    (!ctx.userId || rawId(target.id) !== rawId(ctx.userId))
-  ) {
+  if (target.type === 'user') {
+    if (!ctx.userId || rawId(target.id) !== rawId(ctx.userId)) {
+      throw new Error(
+        'gorkie can only DM the person currently asking, not a third party on their behalf. Ask that person to message gorkie directly instead.'
+      );
+    }
+    return;
+  }
+
+  if (!ctx.channelId) {
+    throw new Error('No current Slack channel to compare against.');
+  }
+
+  const destination =
+    target.type === 'thread'
+      ? slack.decodeThreadId(target.id).channel
+      : target.id;
+  if (rawId(destination) !== rawId(ctx.channelId)) {
     throw new Error(
-      'gorkie can only DM the person currently asking, not a third party on their behalf. Ask that person to message gorkie directly instead.'
+      'gorkie can only post into the channel this conversation is already in, not another channel. Ask someone in that channel to post there instead.'
     );
   }
 }

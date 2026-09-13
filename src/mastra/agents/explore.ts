@@ -55,7 +55,7 @@ export const exploreAgent = new Agent({
       maxRetries: 5,
       reasoning: 'medium',
       topP: 0.95,
-      timeout: { stepMs: config.stepTimeoutMs },
+      timeout: config.modelTimeout,
     },
     stopWhen: stepCountIs(config.maxSteps),
     autoResumeSuspendedTools: true,
