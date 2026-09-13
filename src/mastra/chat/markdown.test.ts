@@ -37,6 +37,39 @@ describe('moveAsterisksAfterMarkdownLinks', () => {
     );
   });
 
+  test('strips asterisks inside bare URLs so the token joins', () => {
+    expect(moveAsterisksAfterMarkdownLinks('*https://hack.cl*ub')).toBe(
+      '*https://hack.club'
+    );
+    expect(
+      moveAsterisksAfterMarkdownLinks('see https://example.com/*path* here')
+    ).toBe('see https://example.com/path here');
+    expect(moveAsterisksAfterMarkdownLinks('https://hack.cl*')).toBe(
+      'https://hack.cl'
+    );
+  });
+
+  test('moves asterisks out of <url> autolinks', () => {
+    expect(moveAsterisksAfterMarkdownLinks('*<https://hack.cl*>ub')).toBe(
+      '*<https://hack.cl>*ub'
+    );
+    expect(moveAsterisksAfterMarkdownLinks('*<https://hack.cl>*ub')).toBe(
+      '*<https://hack.cl>*ub'
+    );
+  });
+
+  test('leaves url-lookalike plain text untouched', () => {
+    expect(moveAsterisksAfterMarkdownLinks('xhttps://a*b')).toBe(
+      'xhttps://a*b'
+    );
+    expect(moveAsterisksAfterMarkdownLinks('say http or <h for short')).toBe(
+      'say http or <h for short'
+    );
+    expect(moveAsterisksAfterMarkdownLinks('<https://not closed *')).toBe(
+      '<https://not closed *'
+    );
+  });
+
   test('leaves escaped brackets literal', () => {
     expect(moveAsterisksAfterMarkdownLinks(String.raw`\[label](path*)`)).toBe(
       String.raw`\[label](path*)`
@@ -50,6 +83,23 @@ describe('moveAsterisksAfterMarkdownLinks', () => {
 });
 
 describe('moveAsterisksAfterMarkdownLinksInStream', () => {
+  test('normalizes a bare url split across stream chunks', async () => {
+    async function* chunks() {
+      yield '*ht';
+      await Promise.resolve();
+      yield 'tps://hack.c';
+      await Promise.resolve();
+      yield 'l*ub';
+    }
+    let out = '';
+    for await (const chunk of moveAsterisksAfterMarkdownLinksInStream({
+      stream: chunks(),
+    })) {
+      out += typeof chunk === 'string' ? chunk : '';
+    }
+    expect(out).toBe('*https://hack.club');
+  });
+
   test('normalizes links split across stream chunks', async () => {
     async function* chunks() {
       yield 'See [la';
