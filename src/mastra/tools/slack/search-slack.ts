@@ -111,6 +111,11 @@ async function assertPublicOnlyFallback(token: string): Promise<void> {
       `SLACK_SEARCH_USER_TOKEN grants ${overreach.join(', ')}, which can read DMs and private channels. Reissue it with search:read.public only.`
     );
   }
+  if (!scopes.includes('search:read.public')) {
+    throw new Error(
+      'SLACK_SEARCH_USER_TOKEN is missing search:read.public, so workspace search would only fail later. Reissue it with search:read.public.'
+    );
+  }
   verifiedFallbackToken = token;
 }
 
