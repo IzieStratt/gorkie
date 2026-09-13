@@ -252,13 +252,8 @@ async function workspaceSearch({
   messageId?: string;
   query: string;
   threadId?: string;
-  token?: string;
+  token: string;
 }) {
-  if (!token) {
-    throw new Error(
-      'No fresh Slack search token for this thread, and no SLACK_SEARCH_USER_TOKEN is configured. Ask the user to mention the bot in a new message, then search again.'
-    );
-  }
   // The workspace token searches as a real person, so it only runs while a
   // live message puts someone in the turn. Scheduled and App Home runs must
   // never borrow that identity.
