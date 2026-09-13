@@ -11,7 +11,7 @@ export const hackclub = createOpenRouter({
 
 function opencode(modelId: string, fallbackSession: string): ModelWithRetries {
   return {
-    model: `opencode-go/${modelId}` as const,
+    model: `opencode-go/${modelId}`,
     headers: ({ requestContext }) => ({
       'user-agent': 'gorkie/1.0',
       'x-opencode-session':

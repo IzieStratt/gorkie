@@ -104,6 +104,7 @@ const orchestrator = new Agent({
       maxRetries: 5,
       topP: 0.95,
       reasoning: 'medium',
+      timeout: { stepMs: config.stepTimeoutMs },
     },
     delegation: {
       messageFilter: ({ messages }) =>

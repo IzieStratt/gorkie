@@ -1,51 +1,12 @@
-import {
-  createGithubTools,
-  GITHUB_WRITE_TOOLS,
-  type GithubToolName,
-} from '@github-tools/sdk';
+import { createGithubTools } from '@github-tools/sdk';
 import type { RequestContext } from '@mastra/core/request-context';
 import { githubAccess, githubAccessToken } from '../../lib/github';
 import { logger } from '../../lib/logger';
 import { asksBefore } from '../../types';
+import { ALLOWLIST, isWriteTool } from './allowlist';
 import { checkoutTool } from './checkout';
 import { handoff } from './handoff';
 import { pushTool } from './push';
-
-const EXPOSED: GithubToolName[] = [
-  'addAssignees',
-  'addIssueComment',
-  'addLabels',
-  'addPullRequestComment',
-  'closeIssue',
-  'compareCommits',
-  'createIssue',
-  'createPullRequest',
-  'forkRepository',
-  'getCiFailureContext',
-  'getCommit',
-  'getFileContent',
-  'getIssueContext',
-  'getPullRequestContext',
-  'getRepository',
-  'getRepositoryTree',
-  'listBranches',
-  'listCheckRuns',
-  'listCommits',
-  'listIssueComments',
-  'listIssues',
-  'listLabels',
-  'listPullRequestFiles',
-  'listPullRequestReviews',
-  'listPullRequests',
-  'removeAssignees',
-  'removeLabel',
-  'requestReviewers',
-  'searchCode',
-  'searchIssues',
-  'searchRepositories',
-  'updateIssue',
-  'updatePullRequest',
-];
 
 export async function githubTools({
   channelId,
@@ -80,7 +41,7 @@ export async function githubTools({
     });
 
     const tools: Record<string, unknown> = {};
-    for (const name of EXPOSED) {
+    for (const name of ALLOWLIST) {
       // An app structurally cannot fork a repository it is not installed on.
       if (name === 'forkRepository' && credential.kind !== 'pat') {
         continue;
@@ -92,7 +53,7 @@ export async function githubTools({
       tools[id] = {
         ...tool,
         needsApproval: asksBefore({
-          kind: name in GITHUB_WRITE_TOOLS ? 'write' : 'read',
+          kind: isWriteTool(name) ? 'write' : 'read',
           level,
         }),
         ...(format && {

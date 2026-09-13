@@ -22,11 +22,7 @@ export async function withHistory({
   let scanned = 0;
   let comments = 0;
   for await (const previous of thread.messages) {
-    if (
-      previous.id === state?.lastSeenMessage ||
-      scanned >= MAX_SCANNED ||
-      comments + lines.length >= MAX_MESSAGES
-    ) {
+    if (previous.id === state?.lastSeenMessage || scanned >= MAX_SCANNED) {
       break;
     }
     scanned++;
@@ -56,6 +52,9 @@ export async function withHistory({
       lines.push(
         `[${author} (${mention})${bot}] (msg:${previous.id}): ${text}${files}`
       );
+    }
+    if (lines.length >= MAX_MESSAGES) {
+      break;
     }
   }
 

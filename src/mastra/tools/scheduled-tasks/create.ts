@@ -2,7 +2,6 @@ import { createTool } from '@mastra/core/tools';
 import { computeNextFireAt, validateCron } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { agent as agentConfig, scheduledTasks } from '../../config';
-import { taskContext } from '../../lib/memory';
 import { input, output } from '../../types/tools/index';
 
 function assertMinimumInterval(cron: string, timezone?: string): void {
@@ -52,11 +51,11 @@ export const createScheduledTaskTool = createTool({
   outputSchema: output({ schedule: z.unknown() }),
   execute: async ({ task, cron, name, timezone }, context) => {
     const service = context.mastra?.schedules;
-    const { threadId, resourceId } = await taskContext({
-      context,
-      agentId: agentConfig.id,
-      missing: 'No current Slack thread/resource to schedule into.',
-    });
+    const threadId = context.agent?.threadId;
+    const resourceId = context.agent?.resourceId;
+    if (!(threadId && resourceId)) {
+      throw new Error('No current Slack thread/resource to schedule into.');
+    }
     if (!service) {
       throw new Error('No Mastra schedule service is available.');
     }
