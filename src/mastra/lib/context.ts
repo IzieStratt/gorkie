@@ -20,7 +20,17 @@ export function channelContext(
   if (!raw) {
     return {};
   }
-  const parsed = channelSchema.safeParse(raw);
+  // Slack sets `channel` as an object, but the Studio/API request-context
+  // boundary serializes it to a JSON string, so parse that back first.
+  let value: unknown = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  const parsed = channelSchema.safeParse(value);
   if (!parsed.success) {
     logger.warn('[context] channel context did not match its shape', {
       issues: parsed.error.issues,
