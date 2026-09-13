@@ -161,28 +161,39 @@ async function toOutput({
     }
   }
 
-  const resolved = await Promise.all(
-    [...channelIds].map(async (channelId) => {
-      if (threadId && channelId === chatChannelId(threadId)) {
-        return channelId;
+  const lookupVisibility = async (channelId: string) => {
+    if (threadId && channelId === chatChannelId(threadId)) {
+      return channelId;
+    }
+    try {
+      const metadata = await chat().channel(channelId).fetchMetadata();
+      return metadata.channelVisibility === 'workspace' ? channelId : undefined;
+    } catch (error) {
+      // A channel gorkie cannot look up is not readable. Anything else, a
+      // rate limit above all, has to fail the search instead of quietly
+      // shrinking it into a confident "nothing found".
+      const parsed = slackErrorSchema.safeParse(error);
+      if (parsed.success && parsed.data.data?.error === 'channel_not_found') {
+        return;
       }
-      try {
-        const metadata = await chat().channel(channelId).fetchMetadata();
-        return metadata.channelVisibility === 'workspace'
-          ? channelId
-          : undefined;
-      } catch (error) {
-        // A channel gorkie cannot look up is not readable. Anything else, a
-        // rate limit above all, has to fail the search instead of quietly
-        // shrinking it into a confident "nothing found".
-        const parsed = slackErrorSchema.safeParse(error);
-        if (parsed.success && parsed.data.data?.error === 'channel_not_found') {
-          return;
-        }
-        throw error;
-      }
-    })
-  );
+      throw error;
+    }
+  };
+  // Bounded in small batches: one unbounded Promise.all can fire enough
+  // parallel fetchMetadata calls to trip Slack rate limits. No caching, on
+  // purpose - visibility is the privacy gate for these results, and a stale
+  // "workspace" entry would leak a channel that later went private.
+  const visibilityBatchSize = 4;
+  const ids = [...channelIds];
+  const resolved: Array<string | undefined> = [];
+  for (let index = 0; index < ids.length; index += visibilityBatchSize) {
+    resolved.push(
+      // biome-ignore lint/performance/noAwaitInLoops: batches are sequential on purpose - that is what bounds the concurrency.
+      ...(await Promise.all(
+        ids.slice(index, index + visibilityBatchSize).map(lookupVisibility)
+      ))
+    );
+  }
   const readable = new Set(
     resolved.filter((channelId) => channelId !== undefined)
   );
@@ -310,13 +321,15 @@ async function search({
       threadId,
     });
   } catch (error) {
+    const parsed = slackErrorSchema.safeParse(error);
+    const code = parsed.success ? parsed.data.data?.error : undefined;
     const reason = String(error);
-    if (
-      !(
-        reason.includes('invalid_action_token') ||
-        reason.includes('token_expired')
-      )
-    ) {
+    const tokenFailure =
+      code === 'invalid_action_token' ||
+      code === 'token_expired' ||
+      reason.includes('invalid_action_token') ||
+      reason.includes('token_expired');
+    if (!tokenFailure) {
       throw error;
     }
     await thread.setState({ searchToken: undefined });
