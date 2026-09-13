@@ -83,6 +83,11 @@ type SearchResponse = z.infer<typeof searchResponseSchema>;
 
 let verifiedFallbackToken: string | undefined;
 
+/**
+ * Verify that the configured fallback search token is scoped to public
+ * channels only, refusing to run a workspace search with a token that can
+ * read DMs or private channels. Checks once per process and token.
+ */
 async function assertPublicOnlyFallback(token: string): Promise<void> {
   if (verifiedFallbackToken === token) {
     return;
@@ -109,6 +114,10 @@ async function assertPublicOnlyFallback(token: string): Promise<void> {
   verifiedFallbackToken = token;
 }
 
+/**
+ * Run one assistant.search.context call against Slack, pinned to public
+ * channels and message content, and return the parsed response page.
+ */
 async function runSearch({
   actionToken,
   cursor,
@@ -137,6 +146,11 @@ async function runSearch({
   );
 }
 
+/**
+ * Reduce a raw search page to messages in channels gorkie can confirm are
+ * workspace-visible right now, trim context text, and stamp the next cursor
+ * with the identity that produced the page.
+ */
 async function toOutput({
   response,
   searchedAs,
@@ -222,6 +236,11 @@ async function toOutput({
   };
 }
 
+/**
+ * Search through the workspace-wide public identity. Requires a live message
+ * in the thread (the borrowed identity never runs on scheduled or unattended
+ * turns) and a fallback token that passes the public-scope check.
+ */
 async function workspaceSearch({
   cursor,
   messageId,
@@ -298,6 +317,11 @@ export const searchSlackTool = createTool({
       }),
     },
   },
+  /**
+   * Run the search as the person who mentioned the bot while their search
+   * token is live, keeping pagination pinned to the identity that issued the
+   * cursor and falling back to the workspace identity when the token expires.
+   */
   execute: async ({ query, cursor }, context) => {
     spendSlackCall(context?.requestContext);
     const { messageId, threadId } = channelContext(context?.requestContext);
