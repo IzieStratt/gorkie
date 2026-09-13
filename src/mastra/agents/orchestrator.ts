@@ -36,7 +36,7 @@ import {
 import { workspaceCodeModePrompt } from '../tools/code-mode/slack';
 import { githubTools } from '../tools/github';
 import { deferredTools, orchestratorTools } from '../tools/toolsets';
-import { workspace } from '../workspace';
+import { pauseSandbox, workspace } from '../workspace';
 import { exploreAgent } from './explore';
 import { researchAgent } from './research';
 
@@ -86,12 +86,9 @@ const orchestrator = new Agent({
     if (failedServers.length > 0) {
       messages.push({
         role: 'system' as const,
-        content: `<mcp_status>The user's MCP server(s) ${failedServers.join(', ')} failed to connect. If they ask about missing tools or the request calls for one of these servers, mention casually that it looks down and they may want to check it in App Home.</mcp_status>`,
+        content: `<mcps>The user's MCP server(s) ${failedServers.join(', ')} failed to connect. If they ask about missing tools or the request calls for one of these servers, mention casually that it looks down and they may want to check it in App Home.</mcps>`,
       });
     }
-    // Last, after every other system message. A formatting rule competes with
-    // everything after it, and this one governs the shape of the reply itself,
-    // so it goes closest to the output rather than buried mid-prompt.
     messages.push({ role: 'system' as const, content: reasoningPrompt });
     return messages;
   },
@@ -113,6 +110,7 @@ const orchestrator = new Agent({
     stopWhen: [toolCall('wait'), stepCountIs(config.maxSteps)],
     autoResumeSuspendedTools: true,
     onAbort: async () => {
+      await pauseSandbox(requestContext);
       const { threadId } = channelContext(requestContext);
       if (!threadId) {
         return;
@@ -126,6 +124,11 @@ const orchestrator = new Agent({
       } catch (error) {
         logger.debug('[orchestrator] failed to post abort notice', { error });
       }
+    },
+    onError: async () => {
+      // A thrown turn never reaches the `sandbox` output processor either, so
+      // pause here too rather than leave the sandbox running until its timeout.
+      await pauseSandbox(requestContext);
     },
   }),
   workspace,
@@ -158,7 +161,7 @@ const orchestrator = new Agent({
       return base;
     }
     const [userTools, github] = await Promise.all([
-      userMCPTools({ threadId, userId }),
+      userMCPTools({ userId }),
       githubTools({
         channelId,
         isDM: isDM === true,

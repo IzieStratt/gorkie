@@ -17,37 +17,6 @@ import { configureModal } from './views';
 
 type PublishHome = (userId: string) => Promise<void>;
 
-async function openServerAction({
-  actionId,
-  openModal,
-  publishHome,
-  userId,
-}: {
-  actionId: string;
-  openModal: (modal: ReturnType<typeof configureModal>) => Promise<unknown>;
-  publishHome: PublishHome;
-  userId: string;
-}): Promise<void> {
-  const [action, name] = actionId.split(' ');
-  if (!name) {
-    return;
-  }
-  if (action === ids.remove) {
-    await removeMCPServer({ name, userId });
-    await publishHome(userId);
-    return;
-  }
-  if (action !== ids.configure) {
-    return;
-  }
-  const server = (await listMCPServers(userId)).find(
-    (entry) => entry.name === name
-  );
-  if (server) {
-    await openModal(configureModal({ server, userId }));
-  }
-}
-
 async function addServer({
   publishHome,
   userId,
@@ -56,7 +25,7 @@ async function addServer({
   publishHome: PublishHome;
   userId: string;
   values: Record<string, string | undefined>;
-}) {
+}): Promise<{ action: 'errors'; errors: Record<string, string> } | undefined> {
   const parsed = mcpServerSchema.safeParse({
     name: values.name?.trim(),
     url: values.url?.trim(),
@@ -164,14 +133,29 @@ export function registerMCPServers({
     );
   });
 
-  bot.onAction((event) =>
-    openServerAction({
-      actionId: event.actionId,
-      openModal: (modal) => event.openModal(modal),
-      publishHome,
-      userId: event.user.userId,
-    })
-  );
+  bot.onAction(ids.remove, async (event) => {
+    const name = event.value;
+    if (!name) {
+      return;
+    }
+    await removeMCPServer({ name, userId: event.user.userId });
+    await publishHome(event.user.userId);
+  });
+
+  bot.onAction(ids.configure, async (event) => {
+    const name = event.value;
+    if (!name) {
+      return;
+    }
+    const server = (await listMCPServers(event.user.userId)).find(
+      (entry) => entry.name === name
+    );
+    if (server) {
+      await event.openModal(
+        configureModal({ server, userId: event.user.userId })
+      );
+    }
+  });
 
   bot.onModalSubmit(ids.configureModal, async (event) => {
     const { permission, scope } = decodePreset(event.values.permission);

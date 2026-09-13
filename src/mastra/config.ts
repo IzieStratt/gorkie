@@ -1,10 +1,13 @@
 import { env } from '@/env';
 export const sandbox = {
   template: 'gorkie-workspace:2.0',
-  // Longest a single command or code mode program may run.
   executionTimeout: 15 * 60 * 1000,
   timeout: 16 * 60 * 1000,
   workdir: '/home/user',
+};
+
+export const upload = {
+  maxBytes: 1_000_000_000,
 };
 
 export const agent = {
@@ -20,8 +23,6 @@ export const summarizer = {
 };
 
 export const scheduledTasks = {
-  // No floor in development so short test intervals are allowed; the 30 minute
-  // minimum only applies in production.
   minInterval: env.NODE_ENV === 'production' ? 30 * 60 * 1000 : 60 * 1000,
 };
 

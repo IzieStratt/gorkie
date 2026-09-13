@@ -2,10 +2,13 @@ import type { AnySpan, SpanOutputProcessor } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { z } from 'zod';
 
-// Mastra Core stashes the live Slack adapter, which holds SLACK_BOT_TOKEN and
-// SLACK_APP_TOKEN, in requestContext under this key. SensitiveDataFilter never
-// touches requestContext, so without stripping it the tokens export verbatim on
-// every span. Value from `@mastra/core` CHAT_CHANNEL_RENDER_CONTEXT_KEY.
+// Mastra stashes its live channel render context under this key, and that object
+// holds the Slack adapter carrying SLACK_BOT_TOKEN and SLACK_APP_TOKEN.
+// `RequestContext.serializeForSpan` passes plain objects through by reference, so
+// the render context reaches the span exporters: drop the whole entry here rather
+// than trust field-name redaction to catch every token nested in the adapter.
+// Mirrors `@mastra/core`'s CHAT_CHANNEL_RENDER_CONTEXT_KEY, which is not
+// re-exported from a public entry point, so the literal is duplicated.
 const RENDER_KEY = '__mastra_chat_channel_render';
 
 const channel = z.object({

@@ -3,12 +3,11 @@ import type {
   ProcessToolResultArgs,
 } from '@mastra/core/processors';
 import { sandbox as sandboxConfig } from '../config';
-import { channelContext } from '../lib/context';
 import { logger } from '../lib/logger';
 import {
   getSandbox,
+  pauseSandbox,
   usedSandbox,
-  workspace,
   workspaceToolNames,
 } from '../workspace';
 
@@ -36,17 +35,8 @@ export const sandbox = {
   },
   async processOutputResult(args: ProcessOutputResultArgs) {
     const { requestContext, messages } = args;
-    if (requestContext && usedSandbox(requestContext)) {
-      try {
-        const sandbox = await getSandbox(requestContext);
-        await sandbox?.retryOnDead(() => sandbox.e2b.pause());
-      } catch (error) {
-        logger.debug('[sandbox] failed to pause', { error });
-      }
-      const { threadId } = channelContext(requestContext);
-      if (threadId) {
-        workspace.clearSandboxCache(threadId);
-      }
+    if (requestContext) {
+      await pauseSandbox(requestContext);
     }
     return messages;
   },

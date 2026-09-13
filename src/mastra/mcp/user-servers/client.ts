@@ -6,8 +6,6 @@ import type { MCPServerConfig } from '../../types';
 import { findMCPUrlError } from '../security';
 import { approvalFor } from './approval';
 
-export const mcpServerNames = new Map<string, ReadonlySet<string>>();
-
 export function serverConnection({
   server,
   url,

@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { agent as agentConfig } from '../config';
+import { channelContext } from '../lib/context';
 import { input, output } from '../types/tools/index';
 import { isAgentSchedule } from './scheduled-tasks/queries';
 
@@ -68,7 +69,9 @@ export const waitTool = createTool({
       ifActive: { behavior: 'persist' },
       ifIdle: {
         behavior: 'wake',
-        streamOptions: { requestContext: context.requestContext?.toJSON() },
+        streamOptions: {
+          requestContext: { channel: channelContext(context.requestContext) },
+        },
       },
       metadata: { kind: 'wait' },
     });

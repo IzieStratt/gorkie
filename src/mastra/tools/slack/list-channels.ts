@@ -1,7 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
-import { channelContext } from '../../lib/context';
 import { chatChannelId } from '../../lib/ids';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { input, optionalCursor, output } from '../../types/tools/index';
@@ -40,7 +39,6 @@ export const listChannelsTool = createTool({
   },
   execute: async ({ query, includeArchived, limit, cursor }, context) => {
     spendSlackCall(context?.requestContext);
-    const currentChannelId = channelContext(context?.requestContext).channelId;
 
     const response = await slack.webClient.conversations.list({
       cursor,
@@ -73,11 +71,7 @@ export const listChannelsTool = createTool({
         )
       : channels;
     return {
-      // A private channel is only listable from inside itself: never leak the
-      // names of private channels the current conversation is not in.
-      channels: matches.filter(
-        (channel) => !channel.private || channel.channelId === currentChannelId
-      ),
+      channels: matches,
       nextCursor: response.response_metadata?.next_cursor || undefined,
     };
   },

@@ -33,7 +33,6 @@ export const lookupCanvasSectionsTool = createTool({
     },
   },
   execute: async ({ canvasId, sectionTypes, containsText }, context) => {
-    // Once, not per branch: exactly one lookup runs either way.
     spendSlackCall(context?.requestContext);
 
     const info = await slack.webClient.files.info({ file: canvasId });

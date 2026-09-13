@@ -10,6 +10,7 @@ import {
 import { E2BSandbox } from '@mastra/e2b';
 import { sandbox as config } from '../config';
 import { channelContext } from '../lib/context';
+import { logger } from '../lib/logger';
 import { E2BFilesystem } from './filesystem';
 import { createSandbox } from './sandbox';
 import {
@@ -60,6 +61,28 @@ export async function getSandbox(
   }
   reached.add(requestContext);
   return sandbox;
+}
+
+// Pause the thread's sandbox and drop its cache entry. The `sandbox` output
+// processor calls this on a normal turn, but that phase never runs on an abort
+// or a thrown turn, so `onAbort`/`onError` call it too: otherwise the sandbox
+// stays live until its own 16 minute timeout after every stopped turn.
+export async function pauseSandbox(
+  requestContext: RequestContext
+): Promise<void> {
+  if (!usedSandbox(requestContext)) {
+    return;
+  }
+  try {
+    const sandbox = await getSandbox(requestContext);
+    await sandbox?.retryOnDead(() => sandbox.e2b.pause());
+  } catch (error) {
+    logger.debug('[sandbox] failed to pause', { error });
+  }
+  const { threadId } = channelContext(requestContext);
+  if (threadId) {
+    workspace.clearSandboxCache(threadId);
+  }
 }
 
 export { sandboxPath } from './path';

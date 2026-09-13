@@ -1,3 +1,4 @@
+import { LangfuseClient } from '@langfuse/client';
 import type { FeedbackEvent, TracingEvent } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import { env } from '@/env';
@@ -11,39 +12,34 @@ import { logger } from '../lib/logger';
 export class LangfuseFeedbackExporter extends BaseExporter {
   name = 'langfuse-feedback';
 
-  onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    return this.send(event);
-  }
+  private readonly langfuse = new LangfuseClient({
+    baseUrl: env.LANGFUSE_BASE_URL,
+    publicKey: env.LANGFUSE_PUBLIC_KEY,
+    secretKey: env.LANGFUSE_SECRET_KEY,
+  });
 
-  private async send(event: FeedbackEvent): Promise<void> {
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     const { feedback } = event;
     if (!feedback.traceId) {
       return;
     }
     const numeric = typeof feedback.value === 'number';
     const user = feedback.feedbackUserId ?? 'unknown';
-    const response = await fetch(`${env.LANGFUSE_BASE_URL}/api/public/scores`, {
-      body: JSON.stringify({
-        comment: numeric ? feedback.comment : String(feedback.value),
-        dataType: numeric ? 'NUMERIC' : 'CATEGORICAL',
-        id: `${feedback.traceId}:${user}:${feedback.feedbackType}`,
-        metadata: feedback.metadata,
-        name: feedback.feedbackType,
-        observationId: feedback.spanId,
-        traceId: feedback.traceId,
-        value: feedback.value,
-      }),
-      headers: {
-        Authorization: `Basic ${Buffer.from(
-          `${env.LANGFUSE_PUBLIC_KEY}:${env.LANGFUSE_SECRET_KEY}`
-        ).toString('base64')}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+    this.langfuse.score.create({
+      comment: numeric ? feedback.comment : String(feedback.value),
+      dataType: numeric ? 'NUMERIC' : 'CATEGORICAL',
+      id: `${feedback.traceId}:${user}:${feedback.feedbackType}`,
+      metadata: feedback.metadata,
+      name: feedback.feedbackType,
+      observationId: feedback.spanId,
+      traceId: feedback.traceId,
+      value: feedback.value,
     });
-    if (!response.ok) {
-      logger.warn('[feedback] langfuse rejected the score', {
-        status: response.status,
+    try {
+      await this.langfuse.score.flush();
+    } catch (error) {
+      logger.warn('[feedback] failed to flush score to langfuse', {
+        error,
         traceId: feedback.traceId,
       });
     }

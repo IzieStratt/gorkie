@@ -1,4 +1,4 @@
-const MAX_HOME_BLOCKS = 100;
+const SLACK_APP_HOME_BLOCK_LIMIT = 100;
 
 type Block = Record<string, unknown>;
 
@@ -10,34 +10,23 @@ export interface HomeSection {
 }
 
 export function fitHome(sections: HomeSection[]): Block[] {
-  const paged = sections.filter((section) => section.rows?.length);
-  const alwaysShown = sections.reduce(
-    (total, section) =>
-      total + section.fixed.length + (section.trailing?.length ?? 0),
-    0
-  );
-  let left = MAX_HOME_BLOCKS - alwaysShown - paged.length;
-
-  const shown = new Map<HomeSection, number>();
-  for (let dealt = true; dealt; ) {
-    dealt = false;
-    for (const section of paged) {
-      const taken = shown.get(section) ?? 0;
-      const row = section.rows?.[taken];
-      if (!row || row.length > left) {
-        continue;
-      }
-      shown.set(section, taken + 1);
-      left -= row.length;
-      dealt = true;
-    }
-  }
+  const reserved = sections.filter((section) => section.rows?.length).length;
+  let budget =
+    SLACK_APP_HOME_BLOCK_LIMIT -
+    sections.reduce(
+      (total, section) =>
+        total + section.fixed.length + (section.trailing?.length ?? 0),
+      0
+    ) -
+    reserved;
 
   return sections.flatMap((section) => {
     const rows = section.rows ?? [];
-    const taken = paged.includes(section)
-      ? (shown.get(section) ?? 0)
-      : rows.length;
+    let taken = 0;
+    while (taken < rows.length && rows[taken].length <= budget) {
+      budget -= rows[taken].length;
+      taken++;
+    }
     const dropped = rows.length - taken;
     return [
       ...section.fixed,

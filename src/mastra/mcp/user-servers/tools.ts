@@ -2,13 +2,11 @@ import { listMCPServers, setMCPServerError } from '../../db/queries/mcps';
 import { logger } from '../../lib/logger';
 import { cleanMCPErrorMessage } from '../errors';
 import { annotatedTool, coverageKey, unlabelledServers } from './approval';
-import { dropClient, mcpServerNames, resolveClient } from './client';
+import { dropClient, resolveClient } from './client';
 
 export async function userMCPTools({
-  threadId,
   userId,
 }: {
-  threadId: string | undefined;
   userId: string;
 }): Promise<Record<string, unknown>> {
   try {
@@ -16,9 +14,6 @@ export async function userMCPTools({
     if (servers.length === 0) {
       await dropClient(userId);
       return {};
-    }
-    if (threadId) {
-      mcpServerNames.set(threadId, new Set(servers.map((s) => s.name)));
     }
     const client = await resolveClient({ servers, userId });
     const { tools, errors } = await client.listToolsWithErrors();

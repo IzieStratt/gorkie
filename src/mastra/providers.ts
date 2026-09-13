@@ -35,14 +35,10 @@ function modelSlug(entry: ModelWithRetries): string | undefined {
   }
 }
 
-async function preferLastWorking({
-  agentKey,
-  models,
-}: {
-  agentKey: string;
-  models: ModelWithRetries[];
-}): Promise<ModelWithRetries[]> {
-  const lastGoodSlug = await recallModel(agentKey);
+async function preferLastWorking(
+  models: ModelWithRetries[]
+): Promise<ModelWithRetries[]> {
+  const lastGoodSlug = await recallModel();
   if (!lastGoodSlug) {
     return models;
   }
@@ -70,8 +66,7 @@ function ladder(agentKey: string): ModelWithRetries[] {
 
 const orchestratorModels = ladder('orchestrator');
 
-export const orchestrator = () =>
-  preferLastWorking({ agentKey: 'orchestrator', models: orchestratorModels });
+export const orchestrator = () => preferLastWorking(orchestratorModels);
 
 export const summarizer: ModelWithRetries[] = [
   { model: hackclub('google/gemini-3.5-flash-lite'), maxRetries: 3 },
@@ -80,13 +75,11 @@ export const summarizer: ModelWithRetries[] = [
 
 const scoutModels = ladder('research');
 
-export const scout = () =>
-  preferLastWorking({ agentKey: 'research', models: scoutModels });
+export const scout = () => preferLastWorking(scoutModels);
 
 const explorerModels = ladder('explore');
 
-export const explorer = () =>
-  preferLastWorking({ agentKey: 'explore', models: explorerModels });
+export const explorer = () => preferLastWorking(explorerModels);
 
 export const images = {
   model: 'google/gemini-3.1-flash-image',

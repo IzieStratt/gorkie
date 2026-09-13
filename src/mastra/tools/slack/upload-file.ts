@@ -2,13 +2,12 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { slack } from '../../chat/client';
 import { type Target, targetSchema } from '../../chat/target';
+import { upload } from '../../config';
 import { channelContext } from '../../lib/context';
 import { parseSlackId, rawId } from '../../lib/ids';
 import { input, output } from '../../types/tools/index';
 import { requireSandbox } from '../../workspace';
 import { assertCanPostTo, joinChannel } from './utils';
-
-const MAX_UPLOAD_BYTES = 1_000_000_000;
 
 async function slackDestination(
   target: Target
@@ -70,9 +69,9 @@ export const uploadFileTool = createTool({
     const stat = await sandbox.retryOnDead(() =>
       sandbox.e2b.files.getInfo(path)
     );
-    if (stat.size > MAX_UPLOAD_BYTES) {
+    if (stat.size > upload.maxBytes) {
       throw new Error(
-        `${path} is ${Math.round(stat.size / 1_000_000)}MB, over the ${MAX_UPLOAD_BYTES / 1_000_000}MB upload limit.`
+        `${path} is ${Math.round(stat.size / 1_000_000)}MB, over the ${upload.maxBytes / 1_000_000}MB upload limit.`
       );
     }
     const name = filename ?? path.split('/').pop() ?? 'file';

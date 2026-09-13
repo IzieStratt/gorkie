@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { computeNextFireAt, validateCron } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { agent as agentConfig, scheduledTasks } from '../../config';
+import { channelContext } from '../../lib/context';
 import { input, output } from '../../types/tools/index';
 
 function assertMinimumInterval(cron: string, timezone?: string): void {
@@ -76,15 +77,12 @@ export const createScheduledTaskTool = createTool({
         threadId,
         resourceId,
         signalType: 'notification',
-        // Carry the Slack channel context onto the woken turn. Without it the
-        // fire has no threadId, and the workspace sandbox resolver
-        // (channelContext(requestContext).threadId) throws "No thread id
-        // available for workspace", failing every model. This is why scheduled
-        // tasks failed while `wait` worked: `wait` already passed this.
         ifActive: { behavior: 'persist' },
         ifIdle: {
           behavior: 'wake',
-          streamOptions: { requestContext: context.requestContext?.toJSON() },
+          streamOptions: {
+            requestContext: { channel: channelContext(context.requestContext) },
+          },
         },
         ...(name ? { name } : {}),
         ...(timezone ? { timezone } : {}),

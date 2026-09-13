@@ -1,4 +1,7 @@
-import { getGitHubCredential } from '../../db/queries/github';
+import {
+  type GitHubCredential,
+  getGitHubCredential,
+} from '../../db/queries/github';
 import { listMCPServers } from '../../db/queries/mcps';
 import { getGitHubSettings, getInstructions } from '../../db/queries/settings';
 import { countInstallations } from '../../lib/github';
@@ -28,18 +31,38 @@ async function settled<T>({
 }
 
 async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
-  const [instructions, mcpServers, credential, github, scheduled] =
-    await Promise.all([
-      settled({ label: 'instructions', userId, work: getInstructions(userId) }),
-      settled({ label: 'mcp', userId, work: listMCPServers(userId) }),
-      settled({ label: 'github', userId, work: getGitHubCredential(userId) }),
-      settled({ label: 'settings', userId, work: getGitHubSettings(userId) }),
-      settled({
-        label: 'scheduled',
+  const credentialResult: Promise<{
+    credential: GitHubCredential | undefined;
+    unreadable: boolean;
+  }> = getGitHubCredential(userId).then(
+    (credential) => ({ credential, unreadable: false }),
+    (error) => {
+      logger.error('[app-home] section failed to load', {
+        error,
+        label: 'github',
         userId,
-        work: scheduledTasksBlocks(userId),
-      }),
-    ]);
+      });
+      return { credential: undefined, unreadable: true };
+    }
+  );
+
+  const [
+    instructions,
+    mcpServers,
+    { credential, unreadable },
+    github,
+    scheduled,
+  ] = await Promise.all([
+    settled({ label: 'instructions', userId, work: getInstructions(userId) }),
+    settled({ label: 'mcp', userId, work: listMCPServers(userId) }),
+    credentialResult,
+    settled({ label: 'settings', userId, work: getGitHubSettings(userId) }),
+    settled({
+      label: 'scheduled',
+      userId,
+      work: scheduledTasksBlocks(userId),
+    }),
+  ]);
   const installations =
     credential?.kind === 'app' ? await countInstallations(credential.token) : 0;
 
@@ -51,7 +74,7 @@ async function buildHomeView(userId: string): Promise<Record<string, unknown>> {
       installations,
       permission: github?.permission ?? 'write',
       threads: github?.threads === true,
-      unreadable: github === undefined,
+      unreadable,
     }),
     mcpServersBlocks(mcpServers ?? []),
     ...(scheduled ? [scheduled] : []),

@@ -4,7 +4,6 @@ import {
 } from '@mastra/core/channels';
 import { z } from 'zod';
 import { label } from '../../lib/label';
-import { mcpServerNames } from '../../mcp/user-servers';
 import { truncate } from './format';
 import { statuses } from './statuses';
 
@@ -51,15 +50,6 @@ export const status: TypingStatusFn = (chunk, context) => {
     return truncate(
       `is using github: ${label(toolName.slice('github_'.length)).toLowerCase()}…`
     );
-  }
-
-  for (const server of mcpServerNames.get(context.threadId) ?? []) {
-    const prefix = `${server}_`;
-    if (toolName.startsWith(prefix)) {
-      return truncate(
-        `is using ${server}: ${label(toolName.slice(prefix.length)).toLowerCase()}…`
-      );
-    }
   }
 
   const args = argsSchema.safeParse(chunk.payload.args).data ?? {};

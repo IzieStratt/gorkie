@@ -9,7 +9,7 @@ const GITHUB_PERMISSIONS = [
 
 export type GitHubPermission = (typeof GITHUB_PERMISSIONS)[number];
 
-export const githubPermissionSchema = z.enum(GITHUB_PERMISSIONS).catch('write');
+export const githubPermissionSchema = z.enum(GITHUB_PERMISSIONS).catch('all');
 
 export interface Repository {
   name: string;

@@ -71,12 +71,14 @@ export function mcpServersBlocks(
           {
             type: 'button',
             text: { type: 'plain_text', text: 'Configure' },
-            action_id: `${ids.configure} ${server.name}`,
+            action_id: ids.configure,
+            value: server.name,
           },
           {
             type: 'button',
             text: { type: 'plain_text', text: 'Remove' },
-            action_id: `${ids.remove} ${server.name}`,
+            action_id: ids.remove,
+            value: server.name,
             style: 'danger',
             confirm: {
               title: { type: 'plain_text', text: 'Remove server?' },
