@@ -6,6 +6,7 @@ import { chat } from '../../chat/instance';
 import { threadState } from '../../chat/state';
 import { channelContext } from '../../lib/context';
 import { chatChannelId } from '../../lib/ids';
+import { logger } from '../../lib/logger';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 
@@ -81,15 +82,20 @@ const slackErrorSchema = z.looseObject({
 
 type SearchResponse = z.infer<typeof searchResponseSchema>;
 
-let verifiedFallbackToken: string | undefined;
+const verificationTtlMs = 10 * 60 * 1000;
+let verifiedFallbackToken: { token: string; at: number } | undefined;
 
 /**
  * Verify that the configured fallback search token is scoped to public
  * channels only, refusing to run a workspace search with a token that can
- * read DMs or private channels. Checks once per process and token.
+ * read DMs or private channels. Re-checks every ten minutes so a token that
+ * was revoked or re-scoped mid-process surfaces as an auth error.
  */
 async function assertPublicOnlyFallback(token: string): Promise<void> {
-  if (verifiedFallbackToken === token) {
+  if (
+    verifiedFallbackToken?.token === token &&
+    Date.now() - verifiedFallbackToken.at < verificationTtlMs
+  ) {
     return;
   }
   const auth = authTestSchema.parse(
@@ -116,7 +122,7 @@ async function assertPublicOnlyFallback(token: string): Promise<void> {
       'SLACK_SEARCH_USER_TOKEN is missing search:read.public, so workspace search would only fail later. Reissue it with search:read.public.'
     );
   }
-  verifiedFallbackToken = token;
+  verifiedFallbackToken = { token, at: Date.now() };
 }
 
 /**
@@ -134,21 +140,42 @@ async function runSearch({
   query: string;
   token: string;
 }): Promise<SearchResponse> {
-  return searchResponseSchema.parse(
-    await slack.webClient.apiCall('assistant.search.context', {
-      action_token: actionToken,
-      // Slack reads these as comma-separated strings. WebClient JSON-encodes an
-      // array, which Slack then ignores, and an ignored channel_types silently
-      // reopens DMs and private channels to whatever the token can reach.
-      channel_types: 'public_channel',
-      content_types: 'messages',
-      cursor,
-      include_context_messages: true,
-      limit: 10,
-      query,
-      token,
-    })
-  );
+  try {
+    return searchResponseSchema.parse(
+      await slack.webClient.apiCall('assistant.search.context', {
+        action_token: actionToken,
+        // Slack reads these as comma-separated strings. WebClient JSON-encodes an
+        // array, which Slack then ignores, and an ignored channel_types silently
+        // reopens DMs and private channels to whatever the token can reach.
+        channel_types: 'public_channel',
+        content_types: 'messages',
+        cursor,
+        include_context_messages: true,
+        limit: 10,
+        query,
+        token,
+      })
+    );
+  } catch (error) {
+    const parsed = slackErrorSchema.safeParse(error);
+    const code = parsed.success ? parsed.data.data?.error : undefined;
+    logger.warn('[slack] assistant.search.context failed', {
+      code,
+      data: parsed.success ? parsed.data.data : undefined,
+      error,
+    });
+    if (
+      code === 'internal_error' ||
+      code === 'service_unavailable' ||
+      code === 'fatal_error'
+    ) {
+      throw new Error(
+        `Slack search failed on Slack's side (${code}). Report that search is unavailable instead of retrying.`,
+        { cause: error }
+      );
+    }
+    throw error;
+  }
 }
 
 /**
