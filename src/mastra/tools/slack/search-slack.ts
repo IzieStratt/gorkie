@@ -5,6 +5,7 @@ import { slack } from '../../chat/client';
 import { chat } from '../../chat/instance';
 import { channelContext } from '../../lib/context';
 import { chatChannelId, rawId } from '../../lib/ids';
+import { logger } from '../../lib/logger';
 import { spendSlackCall } from '../../lib/slack-budget';
 import { input, output } from '../../types/tools/index';
 
@@ -79,6 +80,11 @@ const slackErrorSchema = z.looseObject({
 function searchFailure(error: unknown): Error {
   const parsed = slackErrorSchema.safeParse(error);
   const code = parsed.success ? parsed.data.data?.error : undefined;
+  logger.warn('[slack] assistant.search.context failed', {
+    code,
+    data: parsed.success ? parsed.data.data : undefined,
+    error,
+  });
   if (!code) {
     return new Error(
       'Slack search failed. No results were returned to the model. Do not treat this as an empty search or retry with another token.',
@@ -91,13 +97,17 @@ function searchFailure(error: unknown): Error {
       'Slack has disabled assistant search context. This does not establish whether the cause is an AI access setting or a temporary Slack issue.',
     context_channel_not_found:
       'The search context channel does not exist or the searching identity cannot access it.',
+    fatal_error: 'Slack reported a fatal error on its side.',
     ekm_access_denied: 'Slack denied access under its encryption policy.',
     enterprise_is_restricted:
       'Slack restricted access for this Enterprise organization.',
     missing_scope: 'The search token lacks a required Slack scope.',
     token_expired: 'The Slack search token has expired.',
     invalid_auth: 'Slack rejected the search token.',
+    internal_error:
+      'Slack reported an internal error on its side. It is usually transient, but if it repeats, report search as unavailable.',
     ratelimited: 'Slack rate limited the search.',
+    service_unavailable: 'Slack search is temporarily unavailable.',
   };
   const reason = reasons[code] ?? 'Slack rejected the search request.';
   return new Error(
@@ -108,10 +118,14 @@ function searchFailure(error: unknown): Error {
 
 type SearchResponse = z.infer<typeof searchResponseSchema>;
 
-let verifiedToken: string | undefined;
+const verificationTtlMs = 10 * 60 * 1000;
+let verifiedToken: { at: number; token: string } | undefined;
 
 async function assertPublicOnly(token: string): Promise<void> {
-  if (verifiedToken === token) {
+  if (
+    verifiedToken?.token === token &&
+    Date.now() - verifiedToken.at < verificationTtlMs
+  ) {
     return;
   }
   const auth = authTestSchema.parse(
@@ -138,7 +152,7 @@ async function assertPublicOnly(token: string): Promise<void> {
       'SLACK_USER_TOKEN is missing search:read.public, so workspace search would only fail later. Reissue it with search:read.public.'
     );
   }
-  verifiedToken = token;
+  verifiedToken = { at: Date.now(), token };
 }
 
 async function runSearch({
