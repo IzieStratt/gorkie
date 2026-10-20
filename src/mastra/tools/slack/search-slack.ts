@@ -169,9 +169,12 @@ async function runSearch({
   try {
     return searchResponseSchema.parse(
       await slack.webClient.apiCall('assistant.search.context', {
-        // Keep the originating channel attached when searching with a user
-        // token, so Slack can enforce access controls in that context.
-        context_channel_id: rawId(channelId),
+        // Only public channels are sent as context. A DM or private channel id
+        // paired with a public-only token comes back as internal_error, and
+        // toOutput already drops anything not workspace-visible.
+        context_channel_id: rawId(channelId).startsWith('C')
+          ? rawId(channelId)
+          : undefined,
         // Slack expects comma-separated strings, not JSON-encoded arrays.
         channel_types: 'public_channel',
         content_types: 'messages',
